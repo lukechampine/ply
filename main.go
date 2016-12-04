@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -64,24 +65,34 @@ func (s specializer) Visit(node ast.Node) ast.Visitor {
 
 func main() {
 	log.SetFlags(0)
+	flag.Parse()
 
+	// parse each supplied file
 	fset := token.NewFileSet()
-	f, err := parser.ParseFile(fset, os.Args[1], nil, 0)
-	if err != nil {
-		log.Fatal(err)
+	var files []*ast.File
+	fileNames := make(map[*ast.File]string)
+	for _, arg := range flag.Args() {
+		f, err := parser.ParseFile(fset, arg, nil, 0)
+		if err != nil {
+			log.Fatal(err)
+		}
+		files = append(files, f)
+		fileNames[f] = arg
 	}
 
+	// type-check the package
 	info := types.Info{
 		Types: make(map[ast.Expr]types.TypeAndValue),
 	}
 	var conf types.Config
 	conf.Importer = importer.Default()
-	pkg, err := conf.Check("ply", fset, []*ast.File{f}, &info)
+	pkg, err := conf.Check("ply", fset, files, &info)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	// modify the AST as needed
+	// walk the AST of each file in the package, generating ply functions and
+	// rewriting their callsites
 	spec := specializer{
 		types: info.Types,
 		fset:  fset,
@@ -90,26 +101,29 @@ func main() {
 			Files: make(map[string]*ast.File),
 		},
 	}
-	ast.Walk(spec, f)
+	for _, f := range files {
+		ast.Walk(spec, f)
+	}
 
-	// combine generated files into a single package file
+	// combine generated ply functions into a single file and write it to the
+	// current directory
 	merged := ast.MergePackageFiles(spec.pkg, ast.FilterFuncDuplicates|ast.FilterImportDuplicates)
-
-	// output modified original to current directory
-	origFile, err := os.Create("test_plied.go")
+	implFile, err := os.Create("ply_impls.go")
 	if err != nil {
 		log.Fatal(err)
 	}
-	printer.Fprint(origFile, fset, f)
+	printer.Fprint(implFile, fset, merged)
 
-	// output generated code to current directory
-	genFile, err := os.Create("ply_builtins.go")
-	if err != nil {
-		log.Fatal(err)
+	// output a .go file for each .ply file
+	for _, f := range files {
+		goFile, err := os.Create(fileNames[f] + ".go")
+		if err != nil {
+			log.Fatal(err)
+		}
+		printer.Fprint(goFile, fset, f)
 	}
-	printer.Fprint(genFile, fset, merged)
 
-	// invoke Go compiler
+	// invoke the Go compiler
 	cmd := exec.Command("go", "build")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
