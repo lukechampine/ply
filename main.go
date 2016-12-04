@@ -8,6 +8,7 @@ import (
 	"go/token"
 	"os"
 
+	"github.com/lukechampine/ply/importer"
 	"github.com/lukechampine/ply/types"
 )
 
@@ -72,6 +73,7 @@ func main() {
 		Types: make(map[ast.Expr]types.TypeAndValue),
 	}
 	var conf types.Config
+	conf.Importer = importer.Default()
 	_, err = conf.Check("ply", fset, []*ast.File{f}, &info)
 	if err != nil {
 		fmt.Println(err)
