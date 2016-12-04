@@ -184,6 +184,7 @@ func init() {
 	defPredeclaredConsts()
 	defPredeclaredNil()
 	defPredeclaredFuncs()
+	defPredeclaredPlyFuncs()
 
 	universeIota = Universe.Lookup("iota").(*Const)
 	universeByte = Universe.Lookup("byte").(*TypeName).typ.(*Basic)
@@ -212,6 +213,8 @@ func def(obj Object) {
 		case *TypeName:
 			obj.pkg = Unsafe
 		case *Builtin:
+			obj.pkg = Unsafe
+		case *Ply:
 			obj.pkg = Unsafe
 		default:
 			unreachable()

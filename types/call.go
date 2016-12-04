@@ -51,6 +51,19 @@ func (check *Checker) call(x *operand, e *ast.CallExpr) exprKind {
 		}
 		return predeclaredFuncs[id].kind
 
+	case ply:
+		// ply method
+		id := plyId(x.id)
+		if !check.ply(x, e, id) {
+			x.mode = invalid
+		}
+		x.expr = e
+		// a non-constant result implies a function call
+		if x.mode != invalid && x.mode != constant_ {
+			check.hasCallOrRecv = true
+		}
+		return predeclaredPlyFuncs[id].kind
+
 	default:
 		// function/method call
 		sig, _ := x.typ.Underlying().(*Signature)
@@ -314,6 +327,10 @@ func (check *Checker) selector(x *operand, e *ast.SelectorExpr) {
 				x.mode = builtin
 				x.typ = exp.typ
 				x.id = exp.id
+			case *Ply:
+				x.mode = ply
+				x.typ = exp.typ
+				x.id = builtinId(exp.id)
 			default:
 				unreachable()
 			}

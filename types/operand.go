@@ -26,6 +26,7 @@ const (
 	mapindex                     // operand is a map index expression (acts like a variable on lhs, commaok on rhs of an assignment)
 	value                        // operand is a computed value
 	commaok                      // like value, but operand may be used in a comma,ok expression
+	ply                          // operand is a ply function
 )
 
 var operandModeString = [...]string{
@@ -38,6 +39,7 @@ var operandModeString = [...]string{
 	mapindex:  "map index expression",
 	value:     "value",
 	commaok:   "comma, ok expression",
+	ply:       "ply function",
 }
 
 // An operand represents an intermediate value during type checking.

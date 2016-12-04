@@ -293,6 +293,21 @@ func (check *Checker) recordBuiltinType(f ast.Expr, sig *Signature) {
 	}
 }
 
+func (check *Checker) recordPlyType(f ast.Expr, sig *Signature) {
+	// f must be a (possibly parenthesized) identifier denoting a ply function
+	for {
+		check.recordTypeAndValue(f, ply, sig, nil)
+		switch p := f.(type) {
+		case *ast.Ident:
+			return // we're done
+		case *ast.ParenExpr:
+			f = p.X
+		default:
+			unreachable()
+		}
+	}
+}
+
 func (check *Checker) recordCommaOkTypes(x ast.Expr, a [2]Type) {
 	assert(x != nil)
 	if a[0] == nil || a[1] == nil {

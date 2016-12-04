@@ -103,6 +103,10 @@ func (check *Checker) ident(x *operand, e *ast.Ident, def *Named, path []*TypeNa
 		x.id = obj.id
 		x.mode = builtin
 
+	case *Ply:
+		x.id = builtinId(obj.id)
+		x.mode = ply
+
 	case *Nil:
 		x.mode = value
 

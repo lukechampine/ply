@@ -236,6 +236,17 @@ func newBuiltin(id builtinId) *Builtin {
 	return &Builtin{object{name: predeclaredFuncs[id].name, typ: Typ[Invalid]}, id}
 }
 
+// A Ply represents a ply function.
+// Ply functions don't have a valid type.
+type Ply struct {
+	object
+	id plyId
+}
+
+func newPly(id plyId) *Ply {
+	return &Ply{object{name: predeclaredPlyFuncs[id].name, typ: Typ[Invalid]}, id}
+}
+
 // Nil represents the predeclared value nil.
 type Nil struct {
 	object
@@ -279,6 +290,10 @@ func writeObject(buf *bytes.Buffer, obj Object, qf Qualifier) {
 
 	case *Builtin:
 		buf.WriteString("builtin")
+		typ = nil
+
+	case *Ply:
+		buf.WriteString("ply")
 		typ = nil
 
 	case *Nil:
@@ -334,6 +349,7 @@ func (obj *Var) String() string      { return ObjectString(obj, nil) }
 func (obj *Func) String() string     { return ObjectString(obj, nil) }
 func (obj *Label) String() string    { return ObjectString(obj, nil) }
 func (obj *Builtin) String() string  { return ObjectString(obj, nil) }
+func (obj *Ply) String() string      { return ObjectString(obj, nil) }
 func (obj *Nil) String() string      { return ObjectString(obj, nil) }
 
 func writeFuncName(buf *bytes.Buffer, f *Func, qf Qualifier) {
