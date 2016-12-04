@@ -10,6 +10,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 
 	"github.com/lukechampine/ply/importer"
 	"github.com/lukechampine/ply/types"
@@ -70,14 +71,16 @@ func main() {
 	// parse each supplied file
 	fset := token.NewFileSet()
 	var files []*ast.File
-	fileNames := make(map[*ast.File]string)
+	plyFiles := make(map[string]*ast.File)
 	for _, arg := range flag.Args() {
 		f, err := parser.ParseFile(fset, arg, nil, 0)
 		if err != nil {
 			log.Fatal(err)
 		}
 		files = append(files, f)
-		fileNames[f] = arg
+		if filepath.Ext(arg) == ".ply" {
+			plyFiles[arg] = f
+		}
 	}
 
 	// type-check the package
@@ -91,8 +94,8 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// walk the AST of each file in the package, generating ply functions and
-	// rewriting their callsites
+	// walk the AST of each .ply file in the package, generating ply functions
+	// and rewriting their callsites
 	spec := specializer{
 		types: info.Types,
 		fset:  fset,
@@ -101,7 +104,7 @@ func main() {
 			Files: make(map[string]*ast.File),
 		},
 	}
-	for _, f := range files {
+	for _, f := range plyFiles {
 		ast.Walk(spec, f)
 	}
 
@@ -115,8 +118,8 @@ func main() {
 	printer.Fprint(implFile, fset, merged)
 
 	// output a .go file for each .ply file
-	for _, f := range files {
-		goFile, err := os.Create(fileNames[f] + ".go")
+	for path, f := range plyFiles {
+		goFile, err := os.Create(path + ".go")
 		if err != nil {
 			log.Fatal(err)
 		}
