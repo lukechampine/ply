@@ -6,13 +6,15 @@ import (
 	"go/parser"
 	"go/printer"
 	"go/token"
+	"log"
 	"os"
+	"os/exec"
 
 	"github.com/lukechampine/ply/importer"
 	"github.com/lukechampine/ply/types"
 )
 
-const mergeTempl = `package ply
+const mergeTempl = `package %[3]s
 func merge%[1]s%[2]s(m1, m2 map[%[1]s]%[2]s) map[%[1]s]%[2]s {
 	m3 := make(map[%[1]s]%[2]s)
 	for k, v := range m1 {
@@ -29,8 +31,9 @@ func merge%[1]s%[2]s(m1, m2 map[%[1]s]%[2]s) map[%[1]s]%[2]s {
 // generic ply function, and rewrites the callsites to use their corresponding
 // specialized function.
 type specializer struct {
-	types    map[ast.Expr]types.TypeAndValue
-	newDecls map[string]ast.Decl
+	types map[ast.Expr]types.TypeAndValue
+	fset  *token.FileSet
+	pkg   *ast.Package
 }
 
 func (s specializer) Visit(node ast.Node) ast.Visitor {
@@ -44,17 +47,15 @@ func (s specializer) Visit(node ast.Node) ast.Visitor {
 		if fn.Name == "merge" {
 			mt := s.types[n.Args[0]].Type.(*types.Map)
 			fn.Name += mt.Key().String() + mt.Elem().String()
-			if _, ok := s.newDecls[fn.Name]; !ok {
+			if _, ok := s.pkg.Files[fn.Name]; !ok {
 				// check for existence first, because constructing a new decl
 				// is expensive
-				fset := token.NewFileSet()
-				code := fmt.Sprintf(mergeTempl, mt.Key().String(), mt.Elem().String())
-				// TODO: is there an easier way than ParseFile?
-				f, err := parser.ParseFile(fset, "", code, 0)
+				code := fmt.Sprintf(mergeTempl, mt.Key().String(), mt.Elem().String(), s.pkg.Name)
+				f, err := parser.ParseFile(s.fset, "", code, 0)
 				if err != nil {
 					panic(err)
 				}
-				s.newDecls[fn.Name] = f.Decls[0]
+				s.pkg.Files[fn.Name] = f
 			}
 		}
 	}
@@ -62,11 +63,12 @@ func (s specializer) Visit(node ast.Node) ast.Visitor {
 }
 
 func main() {
+	log.SetFlags(0)
+
 	fset := token.NewFileSet()
-	f, err := parser.ParseFile(fset, "test.ply", nil, 0)
+	f, err := parser.ParseFile(fset, os.Args[1], nil, 0)
 	if err != nil {
-		fmt.Println(err)
-		return
+		log.Fatal(err)
 	}
 
 	info := types.Info{
@@ -74,22 +76,45 @@ func main() {
 	}
 	var conf types.Config
 	conf.Importer = importer.Default()
-	_, err = conf.Check("ply", fset, []*ast.File{f}, &info)
+	pkg, err := conf.Check("ply", fset, []*ast.File{f}, &info)
 	if err != nil {
-		fmt.Println(err)
-		return
+		log.Fatal(err)
 	}
 
 	// modify the AST as needed
 	spec := specializer{
-		types:    info.Types,
-		newDecls: make(map[string]ast.Decl),
+		types: info.Types,
+		fset:  fset,
+		pkg: &ast.Package{
+			Name:  pkg.Name(),
+			Files: make(map[string]*ast.File),
+		},
 	}
 	ast.Walk(spec, f)
-	for _, decl := range spec.newDecls {
-		f.Decls = append(f.Decls, decl)
-	}
 
-	// output modified AST
-	printer.Fprint(os.Stdout, fset, f)
+	// combine generated files into a single package file
+	merged := ast.MergePackageFiles(spec.pkg, ast.FilterFuncDuplicates|ast.FilterImportDuplicates)
+
+	// output modified original to current directory
+	origFile, err := os.Create("test_plied.go")
+	if err != nil {
+		log.Fatal(err)
+	}
+	printer.Fprint(origFile, fset, f)
+
+	// output generated code to current directory
+	genFile, err := os.Create("ply_builtins.go")
+	if err != nil {
+		log.Fatal(err)
+	}
+	printer.Fprint(genFile, fset, merged)
+
+	// invoke Go compiler
+	cmd := exec.Command("go", "build")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	err = cmd.Run()
+	if err != nil {
+		log.Fatal(err)
+	}
 }
