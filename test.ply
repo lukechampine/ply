@@ -1,0 +1,15 @@
+package main
+
+func main() {
+	m1 := map[int]int{1: 1}
+	m2 := map[int]int{2: 2}
+	for k, v := range merge(m1, m2) {
+		println(k, v)
+	}
+
+	s1 := map[int]string{1: "1"}
+	s2 := map[int]string{2: "2"}
+	for k, v := range merge(s1, s2) {
+		println(k, v)
+	}
+}
