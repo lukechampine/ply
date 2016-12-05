@@ -344,7 +344,12 @@ func (check *Checker) selector(x *operand, e *ast.SelectorExpr) {
 		goto Error
 	}
 
-	obj, index, indirect = LookupFieldOrMethod(x.typ, x.mode == variable, check.pkg, sel)
+	// first check for ply method
+	obj, index, indirect = lookupPlyMethod(x.typ, sel)
+	if obj == nil {
+		// fallback to standard lookup
+		obj, index, indirect = LookupFieldOrMethod(x.typ, x.mode == variable, check.pkg, sel)
+	}
 	if obj == nil {
 		switch {
 		case index != nil:

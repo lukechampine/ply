@@ -1,6 +1,9 @@
 package types
 
-import "go/ast"
+import (
+	"go/ast"
+	"go/token"
+)
 
 // A plyId is the id of a ply function.
 type plyId int
@@ -102,4 +105,30 @@ func (check *Checker) ply(x *operand, call *ast.CallExpr, id plyId) (_ bool) {
 	}
 
 	return true
+}
+
+func lookupPlyMethod(T Type, name string) (obj Object, index []int, indirect bool) {
+	switch name {
+	case "filter":
+		// T must be a slice
+		s, ok := T.Underlying().(*Slice)
+		if !ok {
+			break
+		}
+		return makeFilter(s), []int{1}, false
+	}
+	// not a ply method
+	return nil, nil, false
+}
+
+func makeFilter(styp *Slice) *Func {
+	predSig := &Signature{
+		params:  NewTuple(NewVar(token.NoPos, nil, "", styp.Elem())),
+		results: NewTuple(NewVar(token.NoPos, nil, "", Typ[Bool])),
+	}
+	return NewFunc(token.NoPos, nil, "filter", &Signature{
+		recv:    NewVar(token.NoPos, nil, "", styp),                  // []T
+		params:  NewTuple(NewVar(token.NoPos, nil, "pred", predSig)), // func(T) bool
+		results: NewTuple(NewVar(token.NoPos, nil, "", styp)),        // []T
+	})
 }

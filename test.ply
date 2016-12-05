@@ -1,15 +1,13 @@
 package main
 
+import "fmt"
+
 func main() {
 	m1 := map[int]int{1: 1}
 	m2 := map[int]int{2: 2}
-	for k, v := range merge(m1, m2) {
-		println(k, v)
-	}
+	fmt.Println(merge(m1, m2))
 
-	s1 := map[int]string{1: "1"}
-	s2 := map[int]string{2: "2"}
-	for k, v := range merge(s1, s2) {
-		println(k, v)
-	}
+	xs := []int{1, 2, 3, 4, 5}
+	xs = xs.filter(func(x int) bool { return x > 2 })
+	fmt.Println(xs)
 }

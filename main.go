@@ -29,6 +29,20 @@ func merge%[1]s%[2]s(m1, m2 map[%[1]s]%[2]s) map[%[1]s]%[2]s {
 }
 `
 
+const filterTempl = `package %[2]s
+type filter%[1]sslice []%[1]s
+
+func (xs filter%[1]sslice) filter(pred func(%[1]s) bool) []%[1]s {
+	var filtered []%[1]s
+	for _, x := range xs {
+		if pred(x) {
+			filtered = append(filtered, x)
+		}
+	}
+	return filtered
+}
+`
+
 // A specializer is an ast.Visitor that inserts specialized versions of each
 // generic ply function, and rewrites the callsites to use their corresponding
 // specialized function.
@@ -41,23 +55,41 @@ type specializer struct {
 func (s specializer) Visit(node ast.Node) ast.Visitor {
 	switch n := node.(type) {
 	case *ast.CallExpr:
-		fn, ok := n.Fun.(*ast.Ident)
-		if !ok {
-			// ply functions are always idents
-			return s
-		}
-		if fn.Name == "merge" {
-			mt := s.types[n.Args[0]].Type.(*types.Map)
-			fn.Name += mt.Key().String() + mt.Elem().String()
-			if _, ok := s.pkg.Files[fn.Name]; !ok {
-				// check for existence first, because constructing a new decl
-				// is expensive
-				code := fmt.Sprintf(mergeTempl, mt.Key().String(), mt.Elem().String(), s.pkg.Name)
-				f, err := parser.ParseFile(s.fset, "", code, 0)
-				if err != nil {
-					panic(err)
+		switch fn := n.Fun.(type) {
+		case *ast.Ident:
+			// ply func, e.g. merge
+			if fn.Name == "merge" {
+				mt := s.types[n.Args[0]].Type.(*types.Map)
+				fn.Name += mt.Key().String() + mt.Elem().String()
+				if _, ok := s.pkg.Files[fn.Name]; !ok {
+					// check for existence first, because constructing a new decl
+					// is expensive
+					code := fmt.Sprintf(mergeTempl, mt.Key().String(), mt.Elem().String(), s.pkg.Name)
+					f, err := parser.ParseFile(s.fset, "", code, 0)
+					if err != nil {
+						panic(err)
+					}
+					s.pkg.Files[fn.Name] = f
 				}
-				s.pkg.Files[fn.Name] = f
+			}
+		case *ast.SelectorExpr:
+			// ply method, e.g. filter
+			if fn.Sel.Name == "filter" {
+				// wrap selector in a type cast
+				st := s.types[fn.X].Type.Underlying().(*types.Slice)
+				fn.X = &ast.CallExpr{
+					Fun:  ast.NewIdent(fn.Sel.Name + st.Elem().String() + "slice"),
+					Args: []ast.Expr{fn.X},
+				}
+				// generate function and type
+				if _, ok := s.pkg.Files[fn.Sel.Name]; !ok {
+					code := fmt.Sprintf(filterTempl, st.Elem().String(), s.pkg.Name)
+					f, err := parser.ParseFile(s.fset, "", code, 0)
+					if err != nil {
+						panic(err)
+					}
+					s.pkg.Files[fn.Sel.Name] = f
+				}
 			}
 		}
 	}
