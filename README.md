@@ -48,7 +48,7 @@ always supported them.
 
 **What if I want to define my own generic functions, though?**
 
-Sorry, that's not in the cards. The purpose of Ply is to make generics as
+Sorry, that's not in the cards. The purpose of Ply is to make polymorphism as
 painless as possible. Supporting custom generics would mean defining some kind
 of template syntax, and that sucks. I believe [`gen`](https://clipperhouse.github.io/gen) lets you do that, so
 maybe check that out if you really can't live without your special-snowflake
