@@ -5,11 +5,15 @@ import (
 	"go/token"
 )
 
-// A plyId is the id of a ply function.
+// A plyId is the id of a ply function or method.
 type plyId int
 
 const (
+	// funcs
 	_Merge plyId = iota
+	// methods
+	_Filter
+	_Morph
 )
 
 var predeclaredPlyFuncs = [...]struct {
@@ -21,6 +25,15 @@ var predeclaredPlyFuncs = [...]struct {
 	_Merge: {"merge", 2, false, expression},
 }
 
+var predeclaredPlyMethods = [...]struct {
+	name     string
+	nargs    int
+	variadic bool
+}{
+	_Filter: {"filter", 1, false},
+	_Morph:  {"morph", 1, false},
+}
+
 func defPredeclaredPlyFuncs() {
 	for i := range predeclaredPlyFuncs {
 		id := plyId(i)
@@ -28,7 +41,7 @@ func defPredeclaredPlyFuncs() {
 	}
 }
 
-// ply type-checks a call to a ply function or method.
+// ply type-checks a call to a ply builtin.
 func (check *Checker) ply(x *operand, call *ast.CallExpr, id plyId) (_ bool) {
 	bin := predeclaredPlyFuncs[id]
 
@@ -107,6 +120,73 @@ func (check *Checker) ply(x *operand, call *ast.CallExpr, id plyId) (_ bool) {
 	return true
 }
 
+// ply type-checks a call to a special ply method. A ply method is special if
+// its full signature depends on one or more arguments.
+func (check *Checker) plySpecialMethod(x *operand, call *ast.CallExpr, recv Type, id plyId) (_ bool) {
+	bin := predeclaredPlyMethods[id]
+
+	// determine arguments
+	var arg getter
+	nargs := len(call.Args)
+	switch id {
+	default:
+		// make argument getter
+		arg, nargs, _ = unpack(func(x *operand, i int) { check.multiExpr(x, call.Args[i]) }, nargs, false)
+		if arg == nil {
+			return
+		}
+		// evaluate first argument, if present
+		if nargs > 0 {
+			arg(x, 0)
+			if x.mode == invalid {
+				return
+			}
+		}
+		//case _Morph, _Filter:
+		// arguments require special handling
+	}
+
+	// check argument count
+	{
+		msg := ""
+		if nargs < bin.nargs {
+			msg = "not enough"
+		} else if !bin.variadic && nargs > bin.nargs {
+			msg = "too many"
+		}
+		if msg != "" {
+			check.invalidOp(call.Rparen, "%s arguments for %s (expected %d, found %d)", msg, call, bin.nargs, nargs)
+			return
+		}
+	}
+
+	switch id {
+	case _Morph:
+		// ([]T).morph(func(T) U) []U
+		s := recv.Underlying().(*Slice) // enforced by lookupPlyMethod
+		fn := x.typ.Underlying().(*Signature)
+		if fn == nil || fn.Params().Len() != 1 || fn.Results().Len() != 1 || !Identical(fn.Params().At(0).Type(), s.Elem()) {
+			check.errorf(x.pos(), "cannot use %s as func(%s) T value in argument to morph", x, s.Elem())
+			return
+		}
+
+		x.mode = value
+		x.typ = NewSlice(fn.Results().At(0).Type())
+		if check.Types != nil {
+			// TODO: record here?
+		}
+
+	default:
+		unreachable()
+	}
+
+	return true
+}
+
+// lookupPlyMethod returns the ply method 'name' if it exists for T. Some ply
+// methods are special; in this case, a special sentinel signature is returned
+// instead of the typical full signature. These calls will be handled later by
+// plySpecialMethod.
 func lookupPlyMethod(T Type, name string) (obj Object, index []int, indirect bool) {
 	switch name {
 	case "filter":
@@ -116,9 +196,26 @@ func lookupPlyMethod(T Type, name string) (obj Object, index []int, indirect boo
 			break
 		}
 		return makeFilter(s), []int{1}, false
+
+	case "morph":
+		// T must be a slice
+		_, ok := T.Underlying().(*Slice)
+		if !ok {
+			break
+		}
+		return makePlyMethod(_Morph, T), []int{1}, false
 	}
 	// not a ply method
 	return nil, nil, false
+}
+
+func makePlyMethod(id plyId, typ Type) *Func {
+	return NewFunc(token.NoPos, nil, predeclaredPlyMethods[id].name, &Signature{
+		// HACK: hide the recv type in the first param. This is because
+		// check.selector will later set recv = nil. (why?)
+		params: NewTuple(NewVar(token.NoPos, nil, "", typ)),
+		ply:    id,
+	})
 }
 
 func makeFilter(styp *Slice) *Func {

@@ -43,6 +43,18 @@ func (xs filter%[1]sslice) filter(pred func(%[1]s) bool) []%[1]s {
 }
 `
 
+const morphTempl = `package %[3]s
+type morph%[1]s%[2]sslice []%[1]s
+
+func (xs morph%[1]s%[2]sslice) morph(fn func(%[1]s) %[2]s) []%[2]s {
+	morphed := make([]%[2]s, len(xs))
+	for i := range xs {
+		morphed[i] = fn(xs[i])
+	}
+	return morphed
+}
+`
+
 // A specializer is an ast.Visitor that inserts specialized versions of each
 // generic ply function, and rewrites the callsites to use their corresponding
 // specialized function.
@@ -82,13 +94,34 @@ func (s specializer) Visit(node ast.Node) ast.Visitor {
 					Args: []ast.Expr{fn.X},
 				}
 				// generate function and type
-				if _, ok := s.pkg.Files[fn.Sel.Name]; !ok {
+				fileName := fn.Sel.Name + st.Elem().String()
+				if _, ok := s.pkg.Files[fileName]; !ok {
 					code := fmt.Sprintf(filterTempl, st.Elem().String(), s.pkg.Name)
 					f, err := parser.ParseFile(s.fset, "", code, 0)
 					if err != nil {
 						panic(err)
 					}
-					s.pkg.Files[fn.Sel.Name] = f
+					s.pkg.Files[fileName] = f
+				}
+			} else if fn.Sel.Name == "morph" {
+				// determine arg types
+				morphFn := n.Args[0].(*ast.FuncLit).Type
+				origT := s.types[morphFn.Params.List[0].Type].Type
+				morphedT := s.types[morphFn.Results.List[0].Type].Type
+				// wrap selector in a type cast
+				fn.X = &ast.CallExpr{
+					Fun:  ast.NewIdent(fn.Sel.Name + origT.String() + morphedT.String() + "slice"),
+					Args: []ast.Expr{fn.X},
+				}
+				// generate function and type
+				fileName := fn.Sel.Name + origT.String() + morphedT.String()
+				if _, ok := s.pkg.Files[fileName]; !ok {
+					code := fmt.Sprintf(morphTempl, origT.String(), morphedT.String(), s.pkg.Name)
+					f, err := parser.ParseFile(s.fset, "", code, 0)
+					if err != nil {
+						panic(err)
+					}
+					s.pkg.Files[fileName] = f
 				}
 			}
 		}

@@ -52,16 +52,13 @@ func (check *Checker) call(x *operand, e *ast.CallExpr) exprKind {
 		return predeclaredFuncs[id].kind
 
 	case ply:
-		// ply method
+		// ply builtin (not a method)
 		id := plyId(x.id)
 		if !check.ply(x, e, id) {
 			x.mode = invalid
 		}
 		x.expr = e
-		// a non-constant result implies a function call
-		if x.mode != invalid && x.mode != constant_ {
-			check.hasCallOrRecv = true
-		}
+		check.hasCallOrRecv = true
 		return predeclaredPlyFuncs[id].kind
 
 	default:
@@ -71,6 +68,16 @@ func (check *Checker) call(x *operand, e *ast.CallExpr) exprKind {
 			check.invalidOp(x.pos(), "cannot call non-function %s", x)
 			x.mode = invalid
 			x.expr = e
+			return statement
+		}
+
+		if sig.ply != 0 {
+			recv := sig.params.At(0).typ
+			if !check.plySpecialMethod(x, e, recv, sig.ply) {
+				x.mode = invalid
+			}
+			x.expr = e
+			check.hasCallOrRecv = true
 			return statement
 		}
 
@@ -344,11 +351,10 @@ func (check *Checker) selector(x *operand, e *ast.SelectorExpr) {
 		goto Error
 	}
 
-	// first check for ply method
-	obj, index, indirect = lookupPlyMethod(x.typ, sel)
+	obj, index, indirect = LookupFieldOrMethod(x.typ, x.mode == variable, check.pkg, sel)
 	if obj == nil {
-		// fallback to standard lookup
-		obj, index, indirect = LookupFieldOrMethod(x.typ, x.mode == variable, check.pkg, sel)
+		// check for ply method
+		obj, index, indirect = lookupPlyMethod(x.typ, sel)
 	}
 	if obj == nil {
 		switch {

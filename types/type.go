@@ -206,6 +206,7 @@ type Signature struct {
 	params   *Tuple // (incoming) parameters from left to right; or nil
 	results  *Tuple // (outgoing) results from left to right; or nil
 	variadic bool   // true if the last parameter's type is of the form ...T (or string, for append built-in only)
+	ply      plyId  // id of ply method (0 for normal methods)
 }
 
 // NewSignature returns a new function type for the given receiver, parameters,
@@ -222,7 +223,7 @@ func NewSignature(recv *Var, params, results *Tuple, variadic bool) *Signature {
 			panic("types.NewSignature: variadic parameter must be of unnamed slice type")
 		}
 	}
-	return &Signature{nil, recv, params, results, variadic}
+	return &Signature{nil, recv, params, results, variadic, 0}
 }
 
 // Recv returns the receiver of signature s (if a method), or nil if a
