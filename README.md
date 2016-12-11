@@ -33,6 +33,114 @@ func mergeintint(m1, m2 map[int]int) map[int]int {
 `mergeintint` is then substituted for `merge` in the relevant expression, and
 the modified source can then be passed to the Go compiler.
 
+A similar approach is used to implement generic methods:
+
+```go
+xs := []int{1, 2, 3, 4, 6, 20}
+b := xs.filter(func(x int) bool { return x > 3 }).
+        morph(func(x int) bool { return x % 2 == 0 }).
+        reduce(func(acc, x bool) bool { return acc && x }, true)
+```
+
+In the above, `b` is true because all the integers in `xs` greater than 3 are
+even. The specific implementation of `morph` looks like:
+
+```go
+type morphintboolslice []int
+
+func (xs morphintboolslice) morph(fn func(int) bool) []bool {
+	morphed := make([]bool, len(xs))
+	for i := range xs {
+		morphed[i] = fn(xs[i])
+	}
+	return morphed
+}
+```
+
+And to use it, we simply type-cast `xs` to a `morphintboolslice` at the
+callsite.
+
+Usage
+-----
+
+First, install the Ply compiler:
+
+```
+go get github.com/lukechampine/ply
+```
+
+`ply test.ply` will compile `test.ply` to `test.ply.go` and generate a
+`ply_impls.go` file containing the specific implementations of any generics
+used in `test.ply`. It will then invoke `go build` in the directory to
+generate an executable.
+
+I'm aware that this isn't very ergonomic. Once most of the generic functions
+are implemented, I will make `ply` a more complete build tool. Ideally, it
+will function identically to the `go` command.
+
+
+Supported Functions
+-------------------
+
+**Builtins:** `merge`
+
+**Methods:** `filter`, `morph`, `reduce`
+
+
+Future Work
+-----------
+
+The following functions are planned (not a complete list):
+
+**Builtins:** `sort`, `min`/`max`, `repeat`, `replace`, `split`, `uniq`
+
+**Methods:** `contains`, `reverse`, `takeWhile`, `every`, `any`
+
+Also, there is obviously a lot of room for optimization here. Specifically, we
+can optimize reassignment and pipelines. For example, when reassigning the
+result of a `filter`:
+
+```go
+xs := []int{1, 2, 3}
+xs = xs.filter(func(x int) bool { return x >= 2 })
+```
+
+We can reuse the memory of `xs`, eliminating the allocation. As a more extreme
+example, we could even do this when `morph`ing from one type to another,
+provided that the new type is not larger than the original, and that we can
+prove that the original slice is not used anywhere else.
+
+Pipelining means chaining together multiple such calls. For example:
+
+```go
+xs := []int{1, 2, 3, 4, 6, 20}
+b := xs.filter(func(x int) bool { return x > 3 }).
+        morph(func(x int) bool { return x % 2 == 0 }).
+        reduce(func(acc, x bool) bool { return acc && x }, true)
+```
+
+Currently, this sequence requires allocating a new slice for the `filter` and
+a new slice for the `morph`. But if we were writing this transformation by
+hand, we could optimize it like so:
+
+```go
+b := true
+for _, x := range xs {
+	if x > 3 {
+		b = b && (x % 2 == 0)
+	}
+}
+```
+
+This version requires no allocations at all! I would very much like to
+implement this sort of optimization, but I imagine it will be challenging.
+
+It is also possible to parallelize functions like `morph`, but this comes at a
+price. For small lists, the overhead is probably not worth it. Furthermore,
+the caller may not expect their morphing function to be parallelized, leading
+to race conditions. So it's probably better to provide explicitly parallel
+versions of such functions, e.g. `pmorph`.
+
 
 FAQ
 ---
