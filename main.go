@@ -2,7 +2,6 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/printer"
@@ -16,47 +15,8 @@ import (
 	"github.com/lukechampine/ply/types"
 )
 
-const mergeTempl = `package %[3]s
-func merge%[1]s%[2]s(m1, m2 map[%[1]s]%[2]s) map[%[1]s]%[2]s {
-	m3 := make(map[%[1]s]%[2]s)
-	for k, v := range m1 {
-		m3[k] = v
-	}
-	for k, v := range m2 {
-		m3[k] = v
-	}
-	return m3
-}
-`
-
-const filterTempl = `package %[2]s
-type filter%[1]sslice []%[1]s
-
-func (xs filter%[1]sslice) filter(pred func(%[1]s) bool) []%[1]s {
-	var filtered []%[1]s
-	for _, x := range xs {
-		if pred(x) {
-			filtered = append(filtered, x)
-		}
-	}
-	return filtered
-}
-`
-
-const morphTempl = `package %[3]s
-type morph%[1]s%[2]sslice []%[1]s
-
-func (xs morph%[1]s%[2]sslice) morph(fn func(%[1]s) %[2]s) []%[2]s {
-	morphed := make([]%[2]s, len(xs))
-	for i := range xs {
-		morphed[i] = fn(xs[i])
-	}
-	return morphed
-}
-`
-
-// A specializer is an ast.Visitor that inserts specialized versions of each
-// generic ply function, and rewrites the callsites to use their corresponding
+// A specializer is an ast.Visitor that generates specialized versions of each
+// generic ply function and rewrites the callsites to use their corresponding
 // specialized function.
 type specializer struct {
 	types map[ast.Expr]types.TypeAndValue
@@ -64,64 +24,40 @@ type specializer struct {
 	pkg   *ast.Package
 }
 
+func (s specializer) addDecl(filename, code string) {
+	if _, ok := s.pkg.Files[filename]; ok {
+		// check for existence first, because parsing is expensive
+		return
+	}
+	// add package header to code
+	code = "package " + s.pkg.Name + code
+	f, err := parser.ParseFile(s.fset, "", code, 0)
+	if err != nil {
+		panic(err)
+	}
+	s.pkg.Files[filename] = f
+}
+
 func (s specializer) Visit(node ast.Node) ast.Visitor {
 	switch n := node.(type) {
 	case *ast.CallExpr:
 		switch fn := n.Fun.(type) {
 		case *ast.Ident:
-			// ply func, e.g. merge
-			if fn.Name == "merge" {
-				mt := s.types[n.Args[0]].Type.(*types.Map)
-				fn.Name += mt.Key().String() + mt.Elem().String()
-				if _, ok := s.pkg.Files[fn.Name]; !ok {
-					// check for existence first, because constructing a new decl
-					// is expensive
-					code := fmt.Sprintf(mergeTempl, mt.Key().String(), mt.Elem().String(), s.pkg.Name)
-					f, err := parser.ParseFile(s.fset, "", code, 0)
-					if err != nil {
-						panic(err)
-					}
-					s.pkg.Files[fn.Name] = f
-				}
+			if gen, ok := funcGenerators[fn.Name]; ok {
+				name, code := gen(fn, n.Args, s.types)
+				s.addDecl(name, code)
+				// rewrite callsite
+				fn.Name = name
 			}
+
 		case *ast.SelectorExpr:
-			// ply method, e.g. filter
-			if fn.Sel.Name == "filter" {
-				// wrap selector in a type cast
-				st := s.types[fn.X].Type.Underlying().(*types.Slice)
+			if gen, ok := methodGenerators[fn.Sel.Name]; ok {
+				name, code := gen(fn, n.Args, s.types)
+				s.addDecl(name, code)
+				// rewrite callsite
 				fn.X = &ast.CallExpr{
-					Fun:  ast.NewIdent(fn.Sel.Name + st.Elem().String() + "slice"),
+					Fun:  ast.NewIdent(name),
 					Args: []ast.Expr{fn.X},
-				}
-				// generate function and type
-				fileName := fn.Sel.Name + st.Elem().String()
-				if _, ok := s.pkg.Files[fileName]; !ok {
-					code := fmt.Sprintf(filterTempl, st.Elem().String(), s.pkg.Name)
-					f, err := parser.ParseFile(s.fset, "", code, 0)
-					if err != nil {
-						panic(err)
-					}
-					s.pkg.Files[fileName] = f
-				}
-			} else if fn.Sel.Name == "morph" {
-				// determine arg types
-				morphFn := n.Args[0].(*ast.FuncLit).Type
-				origT := s.types[morphFn.Params.List[0].Type].Type
-				morphedT := s.types[morphFn.Results.List[0].Type].Type
-				// wrap selector in a type cast
-				fn.X = &ast.CallExpr{
-					Fun:  ast.NewIdent(fn.Sel.Name + origT.String() + morphedT.String() + "slice"),
-					Args: []ast.Expr{fn.X},
-				}
-				// generate function and type
-				fileName := fn.Sel.Name + origT.String() + morphedT.String()
-				if _, ok := s.pkg.Files[fileName]; !ok {
-					code := fmt.Sprintf(morphTempl, origT.String(), morphedT.String(), s.pkg.Name)
-					f, err := parser.ParseFile(s.fset, "", code, 0)
-					if err != nil {
-						panic(err)
-					}
-					s.pkg.Files[fileName] = f
 				}
 			}
 		}
