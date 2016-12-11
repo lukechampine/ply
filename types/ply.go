@@ -14,6 +14,7 @@ const (
 	// methods
 	_Filter
 	_Morph
+	_Reduce
 )
 
 var predeclaredPlyFuncs = [...]struct {
@@ -32,6 +33,7 @@ var predeclaredPlyMethods = [...]struct {
 }{
 	_Filter: {"filter", 1, false},
 	_Morph:  {"morph", 1, false},
+	_Reduce: {"reduce", 2, false},
 }
 
 func defPredeclaredPlyFuncs() {
@@ -142,8 +144,6 @@ func (check *Checker) plySpecialMethod(x *operand, call *ast.CallExpr, recv Type
 				return
 			}
 		}
-		//case _Morph, _Filter:
-		// arguments require special handling
 	}
 
 	// check argument count
@@ -176,6 +176,40 @@ func (check *Checker) plySpecialMethod(x *operand, call *ast.CallExpr, recv Type
 			// TODO: record here?
 		}
 
+	case _Reduce:
+		// ([]T).reduce(func(U, T) U, U) U
+		s := recv.Underlying().(*Slice) // enforced by lookupPlyMethod
+		fn := x.typ.Underlying().(*Signature)
+		if fn == nil || fn.Params().Len() != 2 || fn.Results().Len() != 1 {
+			check.errorf(x.pos(), "cannot use %s as func(T, %s) T value in argument to filter", x, s.Elem())
+			return
+		}
+
+		T := s.Elem()
+		U := fn.Results().At(0).Type()
+
+		// y may be untyped; convert to U
+		var y operand
+		arg(&y, 1)
+		if y.mode == invalid {
+			return
+		}
+		if isUntyped(y.typ) {
+			check.convertUntyped(&y, U)
+		}
+
+		// now we can fully type-check the fn
+		if !Identical(fn.Params().At(0).Type(), U) || !Identical(fn.Params().At(1).Type(), T) || !Identical(fn.Results().At(0).Type(), U) {
+			check.errorf(x.pos(), "cannot use %s as func(%s, %s) %s value in argument to filter", x, U, T, U)
+			return
+		}
+
+		x.mode = value
+		x.typ = U
+		if check.Types != nil {
+			// TODO: record here?
+		}
+
 	default:
 		unreachable()
 	}
@@ -203,7 +237,15 @@ func lookupPlyMethod(T Type, name string) (obj Object, index []int, indirect boo
 		if !ok {
 			break
 		}
-		return makePlyMethod(_Morph, T), []int{1}, false
+		return makePlyMethod(_Morph, T), []int{2}, false
+
+	case "reduce":
+		// T must be a slice
+		_, ok := T.Underlying().(*Slice)
+		if !ok {
+			break
+		}
+		return makePlyMethod(_Reduce, T), []int{3}, false
 	}
 	// not a ply method
 	return nil, nil, false

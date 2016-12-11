@@ -18,6 +18,7 @@ var funcGenerators = map[string]genFunc{
 var methodGenerators = map[string]genMethod{
 	"filter": filterGen,
 	"morph":  morphGen,
+	"reduce": reduceGen,
 }
 
 const mergeTempl = `
@@ -80,5 +81,25 @@ func morphGen(fn *ast.SelectorExpr, args []ast.Expr, exprTypes map[ast.Expr]type
 	morphedT := exprTypes[morphFn.Results.List[0].Type].Type
 	name = fn.Sel.Name + origT.String() + morphedT.String() + "slice"
 	code = fmt.Sprintf(morphTempl, origT.String(), morphedT.String())
+	return
+}
+
+const reduceTempl = `
+type reduce%[1]s%[2]sslice []%[1]s
+
+func (xs reduce%[1]s%[2]sslice) reduce(fn func(%[2]s, %[1]s) %[2]s, acc %[2]s) %[2]s {
+	for _, x := range xs {
+		acc = fn(acc, x)
+	}
+	return acc
+}
+`
+
+func reduceGen(fn *ast.SelectorExpr, args []ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string) {
+	// determine arg types
+	T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem()
+	U := exprTypes[args[1]].Type
+	name = fn.Sel.Name + T.String() + U.String() + "slice"
+	code = fmt.Sprintf(reduceTempl, T.String(), U.String())
 	return
 }
