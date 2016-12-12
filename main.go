@@ -90,7 +90,7 @@ func main() {
 	var files []*ast.File
 	plyFiles := make(map[string]*ast.File)
 	for _, arg := range flag.Args() {
-		f, err := parser.ParseFile(fset, arg, nil, 0)
+		f, err := parser.ParseFile(fset, arg, nil, parser.ParseComments)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -106,7 +106,7 @@ func main() {
 	}
 	var conf types.Config
 	conf.Importer = importer.Default()
-	pkg, err := conf.Check("ply", fset, files, &info)
+	pkg, err := conf.Check("", fset, files, &info)
 	if err != nil {
 		log.Fatal(err)
 	}

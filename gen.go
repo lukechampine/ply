@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"go/ast"
+	"strings"
 
 	"github.com/lukechampine/ply/types"
 )
@@ -21,9 +22,29 @@ var methodGenerators = map[string]genMethod{
 	"reduce": reduceGen,
 }
 
+// some types may have "unfriendly" names, e.g. "chan int". Need to sanitize
+// these before concatenating them into a new ident.
+func safeIdent(s string) string {
+	return strings.NewReplacer(
+		// slices/arrays
+		"[", "",
+		"]", "",
+		// channels
+		"chan<-", "chan_in",
+		"<-chan", "chan_out",
+		" ", "_",
+		// structs
+		"{", "",
+		"}", "",
+		";", "",
+		// imports
+		".", "",
+	).Replace(s)
+}
+
 const mergeTempl = `
-func merge%[1]s%[2]s(m1, m2 map[%[1]s]%[2]s) map[%[1]s]%[2]s {
-	m3 := make(map[%[1]s]%[2]s)
+func %[1]s(m1, m2 map[%[2]s]%[3]s) map[%[2]s]%[3]s {
+	m3 := make(map[%[2]s]%[3]s)
 	for k, v := range m1 {
 		m3[k] = v
 	}
@@ -36,16 +57,17 @@ func merge%[1]s%[2]s(m1, m2 map[%[1]s]%[2]s) map[%[1]s]%[2]s {
 
 func mergeGen(fn *ast.Ident, args []ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string) {
 	mt := exprTypes[args[0]].Type.(*types.Map)
-	name = fn.Name + mt.Key().String() + mt.Elem().String()
-	code = fmt.Sprintf(mergeTempl, mt.Key().String(), mt.Elem().String())
+	key, elem := mt.Key().String(), mt.Elem().String()
+	name = safeIdent(fn.Name + key + elem)
+	code = fmt.Sprintf(mergeTempl, name, key, elem)
 	return
 }
 
 const filterTempl = `
-type filter%[1]sslice []%[1]s
+type %[1]s []%[2]s
 
-func (xs filter%[1]sslice) filter(pred func(%[1]s) bool) []%[1]s {
-	var filtered []%[1]s
+func (xs %[1]s) filter(pred func(%[2]s) bool) []%[2]s {
+	var filtered []%[2]s
 	for _, x := range xs {
 		if pred(x) {
 			filtered = append(filtered, x)
@@ -56,17 +78,17 @@ func (xs filter%[1]sslice) filter(pred func(%[1]s) bool) []%[1]s {
 `
 
 func filterGen(fn *ast.SelectorExpr, args []ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string) {
-	st := exprTypes[fn.X].Type.Underlying().(*types.Slice)
-	name = fn.Sel.Name + st.Elem().String() + "slice"
-	code = fmt.Sprintf(filterTempl, st.Elem().String())
+	T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem().String()
+	name = safeIdent(fn.Sel.Name + T + "slice")
+	code = fmt.Sprintf(filterTempl, name, T)
 	return
 }
 
 const morphTempl = `
-type morph%[1]s%[2]sslice []%[1]s
+type %[1]s []%[2]s
 
-func (xs morph%[1]s%[2]sslice) morph(fn func(%[1]s) %[2]s) []%[2]s {
-	morphed := make([]%[2]s, len(xs))
+func (xs %[1]s) morph(fn func(%[2]s) %[3]s) []%[3]s {
+	morphed := make([]%[3]s, len(xs))
 	for i := range xs {
 		morphed[i] = fn(xs[i])
 	}
@@ -77,17 +99,17 @@ func (xs morph%[1]s%[2]sslice) morph(fn func(%[1]s) %[2]s) []%[2]s {
 func morphGen(fn *ast.SelectorExpr, args []ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string) {
 	// determine arg types
 	morphFn := args[0].(*ast.FuncLit).Type
-	origT := exprTypes[morphFn.Params.List[0].Type].Type
-	morphedT := exprTypes[morphFn.Results.List[0].Type].Type
-	name = fn.Sel.Name + origT.String() + morphedT.String() + "slice"
-	code = fmt.Sprintf(morphTempl, origT.String(), morphedT.String())
+	T := exprTypes[morphFn.Params.List[0].Type].Type.String()
+	U := exprTypes[morphFn.Results.List[0].Type].Type.String()
+	name = safeIdent(fn.Sel.Name + T + U + "slice")
+	code = fmt.Sprintf(morphTempl, name, T, U)
 	return
 }
 
 const reduceTempl = `
-type reduce%[1]s%[2]sslice []%[1]s
+type %[1]s []%[2]s
 
-func (xs reduce%[1]s%[2]sslice) reduce(fn func(%[2]s, %[1]s) %[2]s, acc %[2]s) %[2]s {
+func (xs %[1]s) reduce(fn func(%[3]s, %[2]s) %[3]s, acc %[3]s) %[3]s {
 	for _, x := range xs {
 		acc = fn(acc, x)
 	}
@@ -97,9 +119,9 @@ func (xs reduce%[1]s%[2]sslice) reduce(fn func(%[2]s, %[1]s) %[2]s, acc %[2]s) %
 
 func reduceGen(fn *ast.SelectorExpr, args []ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string) {
 	// determine arg types
-	T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem()
-	U := exprTypes[args[1]].Type
-	name = fn.Sel.Name + T.String() + U.String() + "slice"
-	code = fmt.Sprintf(reduceTempl, T.String(), U.String())
+	T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem().String()
+	U := exprTypes[args[1]].Type.String()
+	name = safeIdent(fn.Sel.Name + T + U + "slice")
+	code = fmt.Sprintf(reduceTempl, name, T, U)
 	return
 }
