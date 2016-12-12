@@ -24,6 +24,17 @@ type specializer struct {
 	pkg   *ast.Package
 }
 
+func (s specializer) hasMethod(recv ast.Expr, method string) bool {
+	// TODO: use set.Lookup instead of searching manually
+	set := types.NewMethodSet(s.types[recv].Type)
+	for i := 0; i < set.Len(); i++ {
+		if set.At(i).Obj().(*types.Func).Name() == method {
+			return true
+		}
+	}
+	return false
+}
+
 func (s specializer) addDecl(filename, code string) {
 	if _, ok := s.pkg.Files[filename]; ok {
 		// check for existence first, because parsing is expensive
@@ -51,6 +62,11 @@ func (s specializer) Visit(node ast.Node) ast.Visitor {
 			}
 
 		case *ast.SelectorExpr:
+			if s.hasMethod(fn.X, fn.Sel.Name) {
+				// don't generate anything if the method is explicitly
+				// defined. This allows types to override ply methods.
+				break
+			}
 			if gen, ok := methodGenerators[fn.Sel.Name]; ok {
 				name, code := gen(fn, n.Args, s.types)
 				s.addDecl(name, code)
