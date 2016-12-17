@@ -8,9 +8,47 @@ import (
 	"github.com/lukechampine/ply/types"
 )
 
-type genFunc func(*ast.Ident, []ast.Expr, map[ast.Expr]types.TypeAndValue) (string, string)
+type rewriter func(*ast.CallExpr)
 
-type genMethod func(*ast.SelectorExpr, []ast.Expr, map[ast.Expr]types.TypeAndValue) (string, string)
+func rewriteFunc(name string) rewriter {
+	return func(c *ast.CallExpr) {
+		c.Fun.(*ast.Ident).Name = name
+	}
+}
+
+func rewriteMethod(name string) rewriter {
+	return func(c *ast.CallExpr) {
+		fn := c.Fun.(*ast.SelectorExpr)
+		fn.X = &ast.CallExpr{
+			Fun:  ast.NewIdent(name),
+			Args: []ast.Expr{fn.X},
+		}
+	}
+}
+
+func rewriteReassign(reassign ast.Expr) rewriter {
+	return func(c *ast.CallExpr) {
+		c.Args = append(c.Args, reassign)
+	}
+}
+
+func rewriteMethodReassign(name string, reassign ast.Expr) rewriter {
+	return func(c *ast.CallExpr) {
+		rewriteMethod(name)(c)
+		rewriteReassign(reassign)(c)
+	}
+}
+
+func rewriteFuncReassign(name string, reassign ast.Expr) rewriter {
+	return func(c *ast.CallExpr) {
+		rewriteFunc(name)(c)
+		rewriteReassign(reassign)(c)
+	}
+}
+
+type genFunc func(*ast.Ident, []ast.Expr, ast.Expr, map[ast.Expr]types.TypeAndValue) (string, string, rewriter)
+
+type genMethod func(*ast.SelectorExpr, []ast.Expr, ast.Expr, map[ast.Expr]types.TypeAndValue) (string, string, rewriter)
 
 var funcGenerators = map[string]genFunc{
 	"merge": mergeGen,
@@ -55,11 +93,12 @@ func %[1]s(m1, m2 map[%[2]s]%[3]s) map[%[2]s]%[3]s {
 }
 `
 
-func mergeGen(fn *ast.Ident, args []ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string) {
+func mergeGen(fn *ast.Ident, args []ast.Expr, reassign ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
 	mt := exprTypes[args[0]].Type.(*types.Map)
 	key, elem := mt.Key().String(), mt.Elem().String()
-	name = safeIdent(fn.Name + key + elem)
+	name = safeIdent("merge" + key + elem)
 	code = fmt.Sprintf(mergeTempl, name, key, elem)
+	r = rewriteFunc(name)
 	return
 }
 
@@ -77,10 +116,31 @@ func (xs %[1]s) filter(pred func(%[2]s) bool) []%[2]s {
 }
 `
 
-func filterGen(fn *ast.SelectorExpr, args []ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string) {
+const filterReassignTempl = `
+type %[1]s []%[2]s
+
+func (xs %[1]s) filter(pred func(%[2]s) bool, reassign []%[2]s) []%[2]s {
+	filtered := reassign[:0]
+	for _, x := range xs {
+		if pred(x) {
+			filtered = append(filtered, x)
+		}
+	}
+	return filtered
+}
+`
+
+func filterGen(fn *ast.SelectorExpr, args []ast.Expr, reassign ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
 	T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem().String()
-	name = safeIdent(fn.Sel.Name + T + "slice")
-	code = fmt.Sprintf(filterTempl, name, T)
+	name = safeIdent("filter" + T + "slice")
+	if reassign != nil {
+		name += "reassign"
+		code = fmt.Sprintf(filterReassignTempl, name, T)
+		r = rewriteMethodReassign(name, reassign)
+	} else {
+		code = fmt.Sprintf(filterTempl, name, T)
+		r = rewriteMethod(name)
+	}
 	return
 }
 
@@ -96,13 +156,37 @@ func (xs %[1]s) morph(fn func(%[2]s) %[3]s) []%[3]s {
 }
 `
 
-func morphGen(fn *ast.SelectorExpr, args []ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string) {
+const morphReassignTempl = `
+type %[1]s []%[2]s
+
+func (xs %[1]s) morph(fn func(%[2]s) %[3]s, reassign []%[3]s) []%[3]s {
+	var morphed []%[3]s
+	if len(reassign) >= len(xs) {
+		morphed = reassign[:len(xs)]
+	} else {
+		morphed = make([]%[3]s, len(xs))
+	}
+	for i := range xs {
+		morphed[i] = fn(xs[i])
+	}
+	return morphed
+}
+`
+
+func morphGen(fn *ast.SelectorExpr, args []ast.Expr, reassign ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
 	// determine arg types
 	morphFn := args[0].(*ast.FuncLit).Type
 	T := exprTypes[morphFn.Params.List[0].Type].Type.String()
 	U := exprTypes[morphFn.Results.List[0].Type].Type.String()
-	name = safeIdent(fn.Sel.Name + T + U + "slice")
-	code = fmt.Sprintf(morphTempl, name, T, U)
+	name = safeIdent("morph" + T + U + "slice")
+	if reassign != nil {
+		name += "reassign"
+		code = fmt.Sprintf(morphReassignTempl, name, T, U)
+		r = rewriteMethodReassign(name, reassign)
+	} else {
+		code = fmt.Sprintf(morphTempl, name, T, U)
+		r = rewriteMethod(name)
+	}
 	return
 }
 
@@ -117,11 +201,12 @@ func (xs %[1]s) reduce(fn func(%[3]s, %[2]s) %[3]s, acc %[3]s) %[3]s {
 }
 `
 
-func reduceGen(fn *ast.SelectorExpr, args []ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string) {
+func reduceGen(fn *ast.SelectorExpr, args []ast.Expr, _ ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
 	// determine arg types
 	T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem().String()
 	U := exprTypes[args[1]].Type.String()
-	name = safeIdent(fn.Sel.Name + T + U + "slice")
+	name = safeIdent("reduce" + T + U + "slice")
 	code = fmt.Sprintf(reduceTempl, name, T, U)
+	r = rewriteMethod(name)
 	return
 }
