@@ -205,8 +205,17 @@ func (check *Checker) plySpecialMethod(x *operand, call *ast.CallExpr, recv Type
 			if isUntyped(y.typ) {
 				// y may be untyped; convert to U
 				check.convertUntyped(&y, U)
+				if y.mode == invalid {
+					return
+				}
 			} else if !Identical(y.typ, U) {
 				check.errorf(y.pos(), "cannot use %s as initial %s value of reducer func(%s, %s) %s", &y, U, U, T, U)
+				return
+			}
+		} else {
+			// if no initial value is provided, then T and U must be identical
+			if !Identical(T, U) {
+				check.errorf(x.pos(), "cannot use %s as func(%s, %s) %s value in argument to reduce", x, T, T, T)
 				return
 			}
 		}

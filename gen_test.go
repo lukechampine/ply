@@ -95,7 +95,7 @@ package main
 func main() {
 	type ints []int
 	product := func(x, y int) int { return x * y }
-	println(ints{1, 2, 3}.reduce(product, 1))
+	println(ints{1, 2, 3}.reduce(product))
 }`, `6`},
 
 		"method override": {`
@@ -115,6 +115,24 @@ func main() {
 	println(xs[0])
 }`, `7`},
 
+		"selector": {`
+package main
+func main() {
+	type foo struct{ a []int }
+	type bar struct{ f foo }
+	b := bar{foo{[]int{1, 2, 3}}}
+	xs := b.f.a.filter(func(i int) bool { return i > 1 })
+	println(xs[0], xs[1])
+}`, `2 3`},
+
+		"array type": {`
+package main
+func main() {
+	xs := [][3]int{{}, {}}
+	n := xs.reduce(func(acc int, a [3]int) int { return acc + len(a) }, 0)
+	println(n)
+}`, `6`},
+
 		"simple chain": {`
 package main
 func main() {
@@ -122,7 +140,7 @@ func main() {
 	even := func(x int) bool { return x%2 == 0 }
 	all := func(acc, x bool) bool { return acc && x }
 	xs := []int{1, 2, 3, 4, 6, 20}
-	println(xs.filter(gt3).morph(even).reduce(all, true))
+	println(xs.filter(gt3).morph(even).reduce(all))
 }`, `true`},
 	}
 	for name, test := range tests {
