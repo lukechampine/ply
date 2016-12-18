@@ -83,6 +83,13 @@ func main() {
 	println([]int{1, 2, 3}.reduce(product, 1))
 }`, `6`},
 
+		"reduce1": {`
+package main
+func main() {
+	product := func(x, y int) int { return x * y }
+	println([]int{1, 2, 3}.reduce(product))
+}`, `6`},
+
 		"named type": {`
 package main
 func main() {

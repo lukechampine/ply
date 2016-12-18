@@ -33,7 +33,7 @@ var predeclaredPlyMethods = [...]struct {
 }{
 	_Filter: {"filter", 1, false},
 	_Morph:  {"morph", 1, false},
-	_Reduce: {"reduce", 2, false},
+	_Reduce: {"reduce", 1, true}, // 1 optional argument
 }
 
 func defPredeclaredPlyFuncs() {
@@ -177,31 +177,38 @@ func (check *Checker) plySpecialMethod(x *operand, call *ast.CallExpr, recv Type
 		}
 
 	case _Reduce:
+		// ([]T).reduce(func(U, T) U) U
 		// ([]T).reduce(func(U, T) U, U) U
-		s := recv.Underlying().(*Slice) // enforced by lookupPlyMethod
+		if nargs > 2 {
+			check.errorf(call.Pos(), "reduce expects 1 or 2 arguments; got %v", nargs)
+			return
+		}
 		fn := x.typ.Underlying().(*Signature)
+		T := recv.Underlying().(*Slice).Elem() // enforced by lookupPlyMethod
 		if fn == nil || fn.Params().Len() != 2 || fn.Results().Len() != 1 {
-			check.errorf(x.pos(), "cannot use %s as func(T, %s) T value in argument to filter", x, s.Elem())
+			check.errorf(x.pos(), "cannot use %s as func(T, %s) T value in argument to reduce", x, T)
 			return
 		}
-
-		T := s.Elem()
 		U := fn.Results().At(0).Type()
-
-		// y may be untyped; convert to U
-		var y operand
-		arg(&y, 1)
-		if y.mode == invalid {
-			return
-		}
-		if isUntyped(y.typ) {
-			check.convertUntyped(&y, U)
-		}
-
-		// now we can fully type-check the fn
 		if !Identical(fn.Params().At(0).Type(), U) || !Identical(fn.Params().At(1).Type(), T) || !Identical(fn.Results().At(0).Type(), U) {
-			check.errorf(x.pos(), "cannot use %s as func(%s, %s) %s value in argument to filter", x, U, T, U)
+			check.errorf(x.pos(), "cannot use %s as func(%s, %s) %s value in argument to reduce", x, U, T, U)
 			return
+		}
+
+		// initial value is optional
+		if nargs == 2 {
+			var y operand
+			arg(&y, 1)
+			if y.mode == invalid {
+				return
+			}
+			if isUntyped(y.typ) {
+				// y may be untyped; convert to U
+				check.convertUntyped(&y, U)
+			} else if !Identical(y.typ, U) {
+				check.errorf(y.pos(), "cannot use %s as initial %s value of reducer func(%s, %s) %s", &y, U, U, T, U)
+				return
+			}
 		}
 
 		x.mode = value

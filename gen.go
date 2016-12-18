@@ -201,12 +201,32 @@ func (xs %[1]s) reduce(fn func(%[3]s, %[2]s) %[3]s, acc %[3]s) %[3]s {
 }
 `
 
+const reduce1Templ = `
+type %[1]s []%[2]s
+
+func (xs %[1]s) reduce(fn func(%[3]s, %[2]s) %[3]s) %[3]s {
+	if len(xs) == 0 {
+		panic("reduce of empty slice")
+	}
+	acc := xs[0]
+	for _, x := range xs {
+		acc = fn(acc, x)
+	}
+	return acc
+}
+`
+
 func reduceGen(fn *ast.SelectorExpr, args []ast.Expr, _ ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
 	// determine arg types
 	T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem().String()
-	U := exprTypes[args[1]].Type.String()
-	name = safeIdent("reduce" + T + U + "slice")
-	code = fmt.Sprintf(reduceTempl, name, T, U)
+	U := exprTypes[args[0]].Type.(*types.Signature).Params().At(0).Type().String()
+	if len(args) == 1 {
+		name = safeIdent("reduce1" + T + U + "slice")
+		code = fmt.Sprintf(reduce1Templ, name, T, U)
+	} else if len(args) == 2 {
+		name = safeIdent("reduce" + T + U + "slice")
+		code = fmt.Sprintf(reduceTempl, name, T, U)
+	}
 	r = rewriteMethod(name)
 	return
 }
