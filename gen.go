@@ -175,9 +175,9 @@ func (xs %[1]s) morph(fn func(%[2]s) %[3]s, reassign []%[3]s) []%[3]s {
 
 func morphGen(fn *ast.SelectorExpr, args []ast.Expr, reassign ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
 	// determine arg types
-	morphFn := args[0].(*ast.FuncLit).Type
-	T := exprTypes[morphFn.Params.List[0].Type].Type.String()
-	U := exprTypes[morphFn.Results.List[0].Type].Type.String()
+	morphFn := exprTypes[args[0]].Type.Underlying().(*types.Signature)
+	T := morphFn.Params().At(0).Type().String()
+	U := morphFn.Results().At(0).Type().String()
 	name = safeIdent("morph" + T + U + "slice")
 	if reassign != nil {
 		name += "reassign"
