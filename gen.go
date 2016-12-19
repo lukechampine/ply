@@ -81,21 +81,30 @@ func safeIdent(s string) string {
 }
 
 const mergeTempl = `
-func %[1]s(m1, m2 map[%[2]s]%[3]s) map[%[2]s]%[3]s {
-	m3 := make(map[%[2]s]%[3]s)
-	for k, v := range m1 {
-		m3[k] = v
+func %[1]s(recv map[%[2]s]%[3]s, rest ...map[%[2]s]%[3]s) map[%[2]s]%[3]s {
+	if len(rest) == 0 {
+		return recv
+	} else if recv == nil {
+		recv = make(map[%[2]s]%[3]s, len(rest[0]))
 	}
-	for k, v := range m2 {
-		m3[k] = v
+	for _, m := range rest {
+		for k, v := range m {
+			recv[k] = v
+		}
 	}
-	return m3
+	return recv
 }
 `
 
 func mergeGen(fn *ast.Ident, args []ast.Expr, reassign ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
-	mt := exprTypes[args[0]].Type.(*types.Map)
-	key, elem := mt.Key().String(), mt.Elem().String()
+	// seek until we find a non-nil arg
+	var key, elem string
+	for _, arg := range args {
+		if mt, ok := exprTypes[arg].Type.(*types.Map); ok {
+			key, elem = mt.Key().String(), mt.Elem().String()
+			break
+		}
+	}
 	name = safeIdent("merge" + key + elem)
 	code = fmt.Sprintf(mergeTempl, name, key, elem)
 	r = rewriteFunc(name)

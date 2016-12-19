@@ -62,6 +62,13 @@ func main() {
 	println(m[1], m[2])
 }`, `1 2`},
 
+		"multi merge": {`
+package main
+func main() {
+	m := merge(nil, map[int]int{1: 1}, nil, map[int]int{2: 2})
+	println(m[1], m[2])
+}`, `1 2`},
+
 		"simple filter": {`
 package main
 func main() {

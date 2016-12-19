@@ -23,7 +23,7 @@ var predeclaredPlyFuncs = [...]struct {
 	variadic bool
 	kind     exprKind
 }{
-	_Merge: {"merge", 2, false, expression},
+	_Merge: {"merge", 2, true, expression},
 }
 
 var predeclaredPlyMethods = [...]struct {
@@ -82,37 +82,42 @@ func (check *Checker) ply(x *operand, call *ast.CallExpr, id plyId) (_ bool) {
 
 	switch id {
 	case _Merge:
-		// merge(x, y Map) int
-		var dstKey, dstElem Type
-		if t, _ := x.typ.Underlying().(*Map); t != nil {
-			dstKey, dstElem = t.key, t.elem
-		}
-		var y operand
-		arg(&y, 1)
-		if y.mode == invalid {
-			return
-		}
-		var srcKey, srcElem Type
-		if t, _ := y.typ.Underlying().(*Map); t != nil {
-			srcKey, srcElem = t.key, t.elem
-		}
+		// merge(x map[T]U, y ...map[T]U) map[T]U
 
-		if dstKey == nil || dstElem == nil || srcKey == nil || srcElem == nil {
-			check.invalidArg(x.pos(), "merge expects map arguments; found %s and %s", x, &y)
-			return
-		}
-
-		if !Identical(dstKey, srcKey) {
-			check.invalidArg(x.pos(), "arguments to merge %s and %s have different key types %s and %s", x, &y, dstKey, srcKey)
-			return
-		} else if !Identical(dstElem, srcElem) {
-			check.invalidArg(x.pos(), "arguments to merge %s and %s have different element types %s and %s", x, &y, dstElem, srcElem)
-			return
+		// all args must have the same type, or nil
+		var T, U Type
+		for i := range call.Args {
+			var y operand
+			arg(&y, i)
+			if y.mode == invalid {
+				return
+			}
+			if y.typ == Typ[UntypedNil] {
+				// untyped; assume same as others
+				continue
+			}
+			// get type
+			t, ok := y.typ.Underlying().(*Map)
+			if !ok {
+				check.invalidArg(y.pos(), "merge expected map type; found %s", &y)
+				return
+			}
+			if T == nil {
+				// don't know T or U; set them
+				T, U = t.key, t.elem
+				x.typ = y.typ
+			} else {
+				// T and U are known
+				if !Identical(T, t.key) || !Identical(U, t.elem) {
+					check.invalidArg(y.pos(), "merge expected all args to be of type map[%s]%s; found %s", T, U, t)
+					return
+				}
+			}
 		}
 
 		x.mode = value
 		if check.Types != nil {
-			check.recordPlyType(call.Fun, makeSig(x.typ, x.typ, y.typ))
+			//check.recordPlyType(call.Fun, makeSig(x.typ, x.typ, x.typ))
 		}
 
 	default:
