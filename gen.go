@@ -161,7 +161,7 @@ type %[1]s []%[2]s
 
 func (xs %[1]s) morph(fn func(%[2]s) %[3]s, reassign []%[3]s) []%[3]s {
 	var morphed []%[3]s
-	if len(reassign) >= len(xs) {
+	if cap(reassign) >= len(xs) {
 		morphed = reassign[:len(xs)]
 	} else {
 		morphed = make([]%[3]s, len(xs))
