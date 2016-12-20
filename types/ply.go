@@ -15,6 +15,7 @@ const (
 	_Filter
 	_Morph
 	_Reduce
+	_Reverse
 )
 
 var predeclaredPlyFuncs = [...]struct {
@@ -31,9 +32,10 @@ var predeclaredPlyMethods = [...]struct {
 	nargs    int
 	variadic bool
 }{
-	_Filter: {"filter", 1, false},
-	_Morph:  {"morph", 1, false},
-	_Reduce: {"reduce", 1, true}, // 1 optional argument
+	_Filter:  {"filter", 1, false},
+	_Morph:   {"morph", 1, false},
+	_Reduce:  {"reduce", 1, true}, // 1 optional argument
+	_Reverse: {"reverse", 0, false},
 }
 
 func defPredeclaredPlyFuncs() {
@@ -239,9 +241,10 @@ func (check *Checker) plySpecialMethod(x *operand, call *ast.CallExpr, recv Type
 }
 
 // lookupPlyMethod returns the ply method 'name' if it exists for T. Some ply
-// methods are special; in this case, a special sentinel signature is returned
-// instead of the typical full signature. These calls will be handled later by
-// plySpecialMethod.
+// methods are special; specifically, we must know their argument types before
+// we can fully type-check the expression. In this case, a special sentinel
+// signature is returned instead of the typical full signature. These calls
+// will be handled later by plySpecialMethod.
 func lookupPlyMethod(T Type, name string) (obj Object, index []int, indirect bool) {
 	switch name {
 	case "filter":
@@ -251,6 +254,16 @@ func lookupPlyMethod(T Type, name string) (obj Object, index []int, indirect boo
 			break
 		}
 		return makeFilter(s), []int{1}, false
+
+	case "reverse":
+		// T must be a slice
+		s, ok := T.Underlying().(*Slice)
+		if !ok {
+			break
+		}
+		return makeReverse(s), []int{3}, false
+
+	// special methods
 
 	case "morph":
 		// T must be a slice
@@ -282,13 +295,23 @@ func makePlyMethod(id plyId, typ Type) *Func {
 }
 
 func makeFilter(styp *Slice) *Func {
+	// func(T) bool)
 	predSig := &Signature{
 		params:  NewTuple(NewVar(token.NoPos, nil, "", styp.Elem())),
 		results: NewTuple(NewVar(token.NoPos, nil, "", Typ[Bool])),
 	}
+	// ([]T).filter(func(T) bool) []T
 	return NewFunc(token.NoPos, nil, "filter", &Signature{
-		recv:    NewVar(token.NoPos, nil, "", styp),                  // []T
-		params:  NewTuple(NewVar(token.NoPos, nil, "pred", predSig)), // func(T) bool
-		results: NewTuple(NewVar(token.NoPos, nil, "", styp)),        // []T
+		recv:    NewVar(token.NoPos, nil, "", styp),
+		params:  NewTuple(NewVar(token.NoPos, nil, "pred", predSig)),
+		results: NewTuple(NewVar(token.NoPos, nil, "", styp)),
+	})
+}
+
+func makeReverse(styp *Slice) *Func {
+	// ([]T).reverse() []T
+	return NewFunc(token.NoPos, nil, "reverse", &Signature{
+		recv:    NewVar(token.NoPos, nil, "", styp),
+		results: NewTuple(NewVar(token.NoPos, nil, "", styp)),
 	})
 }

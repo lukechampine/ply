@@ -69,6 +69,13 @@ func main() {
 	println(m[1], m[2])
 }`, `1 2`},
 
+		"merge merge": {`
+package main
+func main() {
+	m := merge(merge(nil, map[int]int{1: 1}), merge(nil, map[int]int{2: 2}))
+	println(m[1], m[2])
+}`, `1 2`},
+
 		"simple filter": {`
 package main
 func main() {
@@ -149,6 +156,20 @@ func main() {
 	xs := []int{1, 2, 3, 4, 6, 20}
 	println(xs.filter(gt3).morph(even).reduce(all))
 }`, `true`},
+
+		"reverse": {`
+package main
+func main() {
+	xs := []int{1, 2, 3}.reverse()
+	println(xs[0], xs[1], xs[2])
+}`, `3 2 1`},
+
+		"re-reverse": {`
+package main
+func main() {
+	xs := []int{1, 2, 3}.reverse().reverse()
+	println(xs[0], xs[1], xs[2])
+}`, `1 2 3`},
 	}
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -156,7 +177,7 @@ func main() {
 			if err != nil {
 				t.Errorf("%v: %v", err, output)
 			} else if output != test.output {
-				t.Errorf("wrong output:\n[%v]\n\r\texpected:\n[%v]", output, test.output)
+				t.Errorf("wrong output:\n%q\n\r\texpected:\n%q", output, test.output)
 			}
 		})
 	}

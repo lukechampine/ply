@@ -55,9 +55,10 @@ var funcGenerators = map[string]genFunc{
 }
 
 var methodGenerators = map[string]genMethod{
-	"filter": filterGen,
-	"morph":  morphGen,
-	"reduce": reduceGen,
+	"filter":  filterGen,
+	"morph":   morphGen,
+	"reduce":  reduceGen,
+	"reverse": reverseGen,
 }
 
 // some types may have "unfriendly" names, e.g. "chan int". Need to sanitize
@@ -236,6 +237,32 @@ func reduceGen(fn *ast.SelectorExpr, args []ast.Expr, _ ast.Expr, exprTypes map[
 		name = safeIdent("reduce" + T + U + "slice")
 		code = fmt.Sprintf(reduceTempl, name, T, U)
 	}
+	r = rewriteMethod(name)
+	return
+}
+
+const reverseTempl = `
+type %[1]s []%[2]s
+
+func (xs %[1]s) reverse() []%[2]s {
+	reversed := make([]%[2]s, len(xs))
+	for i := range xs {
+		reversed[i] = xs[len(xs)-1-i]
+	}
+	return reversed
+}
+`
+
+func reverseGen(fn *ast.SelectorExpr, args []ast.Expr, _ ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
+	// NOTE: we can't safely use reassign because it may be the same slice
+	// that we're reversing. Since we don't have a way of knowing (slices
+	// don't support ==), we unfortunately cannot ever reuse existing memory.
+	//
+	// However, it should be safe to reverse in-place when called on a slice
+	// literal or as part of a chain.
+	T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem().String()
+	name = safeIdent("reverse" + T + "slice")
+	code = fmt.Sprintf(reverseTempl, name, T)
 	r = rewriteMethod(name)
 	return
 }
