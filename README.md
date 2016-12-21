@@ -6,7 +6,7 @@ basically identical to Go's, but with more builtin functions for manipulating
 generic containers (slices, arrays, maps). This is accomplished by forking
 Go's type-checker, running it on the `.ply` file, and using the resolved types
 to generate specific versions of the generic function. For example, given the
-following code:
+following Ply code:
 
 ```go
 m1 := map[int]int{1: 1}
@@ -79,36 +79,72 @@ are implemented, I will make `ply` a more complete build tool. Ideally, it
 will function identically to the `go` command.
 
 
-Supported Functions
--------------------
+Supported Functions and Methods
+-------------------------------
 
 **Builtins:** `merge`
 
-**Methods:** `filter`, `morph`, `reduce`
+- Planned: `sort`, `min`/`max`, `repeat`, `replace`, `split`, `uniq`
+
+**Methods:** `filter`, `morph`, `reduce`, `reverse`
+
+- Planned: `contains`, `takeWhile`, `every`, `any`
+
+All functions and methods are documented in the [`ply` pseudo-package](https://godoc.org/github.com/lukechampine/ply/doc).
 
 
-Future Work
------------
+Supported Optimizations
+-----------------------
 
-The following functions are planned (not a complete list):
+In many cases we can reduce allocations when using Ply methods. The Ply
+compiler will automatically apply these optimizations when it is safe to do
+so. However, many optimizations have trade-offs. If performance is important,
+you should always read the docstring of each method in order to understand
+what optimizations may be applied. Depending on your use case, it may be
+necessary to write your own implementation to squeeze out maximum performance.
 
-**Builtins:** `sort`, `min`/`max`, `repeat`, `replace`, `split`, `uniq`
+**Reassignment:**
 
-**Methods:** `contains`, `reverse`, `takeWhile`, `every`, `any`
-
-Also, there is obviously a lot of room for optimization here. Specifically, we
-can optimize reassignment and pipelines. For example, when reassigning the
-result of a `filter`:
+When the result of a slice transformation is reassigned to an existing slice,
+we can often reuse that slice's memory. For example, a standard `filter` looks
+something like this:
 
 ```go
-xs := []int{1, 2, 3}
-xs = xs.filter(func(x int) bool { return x >= 2 })
+func (xs filterintslice) filter(pred func(int) bool) []int {
+	var filtered []int
+	for _, x := range xs {
+		if pred(x) {
+			filtered = append(filtered, x)
+		}
+	}
+	return filtered
+}
 ```
 
-We can reuse the memory of `xs`, eliminating the allocation. As a more extreme
-example, we could even do this when `morph`ing from one type to another,
-provided that the new type is not larger than the original, and that we can
-prove that the original slice is not used anywhere else.
+But if we reassign the result of `filter` to an existing slice (often the same
+slice being filtered), a different implementation is used:
+
+```go
+func (xs filterintslicereassign) filter(pred func(int) bool, reassign []int) []int {
+	filtered := reassign[:0]
+	for _, x := range xs {
+		if pred(x) {
+			filtered = append(filtered, x)
+		}
+	}
+	return filtered
+}
+```
+
+This comes with a caveat, though: `filtered` now holds a reference to the
+underlying memory of `reassign`, so that memory can't be garbage collected. If
+`reassign` is very large and `filtered` winds up being small, it may have been
+more appropriate to allocate a smaller slice. Even worse, if the elements of
+`reassign` hold pointers to more memory, none of that memory can be collected
+either. This caveat applies to other methods as well, so read the docstrings
+carefully.
+
+**Pipelining (planned):**
 
 Pipelining means chaining together multiple such calls. For example:
 
@@ -135,11 +171,14 @@ for _, x := range xs {
 This version requires no allocations at all! I would very much like to
 implement this sort of optimization, but I imagine it will be challenging.
 
-It is also possible to parallelize functions like `morph`, but this comes at a
-price. For small lists, the overhead is probably not worth it. Furthermore,
-the caller may not expect their morphing function to be parallelized, leading
-to race conditions. So it's probably better to provide explicitly parallel
-versions of such functions, e.g. `pmorph`.
+**Parallelization (planned):**
+
+Functor operations like `morph` can be trivially parallelized, but this
+optimization should not be applied automatically. For small lists, the
+overhead is probably not worth it. More importantly, if the function has side-
+effects, parallelizing may cause a race condition. So this optimization must
+be specifically requested by the caller via separate identifiers, e.g.
+`pmorph`, `pfilter`, etc.
 
 
 FAQ
@@ -153,6 +192,21 @@ reflection is slow, and codegen is cumbersome. Ply is an attempt at making
 codegen suck a bit less. You don't need to grapple with magic annotations or
 `go generate`; you can just start using `filter` and `reduce` as though Go had
 always supported them.
+
+**What are the downsides of this approach?**
+
+The most obvious is that it's less flexible; you can only use the functions
+and methods that Ply provides. Another annoyance is that since they behave
+like builtins, you can't pass them around as first-class values. Fortunately
+this is a pretty rare thing to do, and it's possible to work around it in most
+cases. (For example, you can wrap the call in a `func`.)
+
+The usual codegen downsides apply as well: slower compilation, larger
+binaries, less helpful error messages. Your build process will also be more
+complicated, though hopefully less complicated than writing template code and
+using `go generate`. The fact of the matter is that *there is no silver
+bullet*: every implementation of generics has its downsides. Do your research
+before deciding whether Ply is the right approach for your project.
 
 **What if I want to define my own generic functions, though?**
 
