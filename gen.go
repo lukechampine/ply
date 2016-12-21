@@ -68,6 +68,8 @@ func safeIdent(s string) string {
 		// slices/arrays
 		"[", "",
 		"]", "",
+		// pointers
+		"*", "ptr",
 		// channels
 		"chan<-", "chan_in",
 		"<-chan", "chan_out",

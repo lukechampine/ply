@@ -147,6 +147,14 @@ func main() {
 	println(n)
 }`, `6`},
 
+		"pointer type": {`
+package main
+func main() {
+	xs := []*int{nil, nil}
+	n := xs.reduce(func(b bool, i *int) bool { return b && i == nil }, true)
+	println(n)
+}`, `true`},
+
 		"simple chain": {`
 package main
 func main() {
