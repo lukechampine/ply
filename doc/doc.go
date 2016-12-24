@@ -58,6 +58,14 @@ func (s SliceT) Reduce(fn func(U, T) U, acc U) U
 // difficult to detect when this optimization can be safely applied.
 func (s SliceT) Reverse() SliceT
 
+// TakeWhile returns a new slice containing the initial elements of s that
+// satisfy pred. That is, unlike Filter, the slice returned by TakeWhile is
+// guaranteed to be a contiguous subset of s beginning at the first element.
+// If the result is reassigned to an existing slice of the same type,
+// TakeWhile will reuse that slice's memory. As with Filter, be careful when
+// reassigning to large slices.
+func (s SliceT) TakeWhile(pred func(T) bool) SliceT
+
 // Merge copies the contents of each map in rest into recv and returns it. If
 // recv is nil, a new map will be allocated to hold the contents. Thus it is
 // idiomatic to write:

@@ -16,6 +16,7 @@ const (
 	_Morph
 	_Reduce
 	_Reverse
+	_TakeWhile
 )
 
 var predeclaredPlyFuncs = [...]struct {
@@ -32,10 +33,11 @@ var predeclaredPlyMethods = [...]struct {
 	nargs    int
 	variadic bool
 }{
-	_Filter:  {"filter", 1, false},
-	_Morph:   {"morph", 1, false},
-	_Reduce:  {"reduce", 1, true}, // 1 optional argument
-	_Reverse: {"reverse", 0, false},
+	_Filter:    {"filter", 1, false},
+	_Morph:     {"morph", 1, false},
+	_Reduce:    {"reduce", 1, true}, // 1 optional argument
+	_Reverse:   {"reverse", 0, false},
+	_TakeWhile: {"takeWhile", 1, false},
 }
 
 func defPredeclaredPlyFuncs() {
@@ -241,10 +243,10 @@ func (check *Checker) plySpecialMethod(x *operand, call *ast.CallExpr, recv Type
 }
 
 // lookupPlyMethod returns the ply method 'name' if it exists for T. Some ply
-// methods are special; specifically, we must know their argument types before
-// we can fully type-check the expression. In this case, a special sentinel
-// signature is returned instead of the typical full signature. These calls
-// will be handled later by plySpecialMethod.
+// methods are special; specifically, their signature depends on their
+// arguments. In this case, a special sentinel signature is returned instead
+// of the typical full signature. These calls will be handled later by
+// plySpecialMethod.
 func lookupPlyMethod(T Type, name string) (obj Object, index []int, indirect bool) {
 	switch name {
 	case "filter":
@@ -261,7 +263,7 @@ func lookupPlyMethod(T Type, name string) (obj Object, index []int, indirect boo
 		if !ok {
 			break
 		}
-		return makeReverse(s), []int{3}, false
+		return makeReverse(s), []int{2}, false
 
 	// special methods
 
@@ -271,7 +273,7 @@ func lookupPlyMethod(T Type, name string) (obj Object, index []int, indirect boo
 		if !ok {
 			break
 		}
-		return makePlyMethod(_Morph, T), []int{2}, false
+		return makePlyMethod(_Morph, T), []int{3}, false
 
 	case "reduce":
 		// T must be a slice
@@ -279,7 +281,15 @@ func lookupPlyMethod(T Type, name string) (obj Object, index []int, indirect boo
 		if !ok {
 			break
 		}
-		return makePlyMethod(_Reduce, T), []int{3}, false
+		return makePlyMethod(_Reduce, T), []int{4}, false
+
+	case "takeWhile":
+		// T must be a slice
+		s, ok := T.Underlying().(*Slice)
+		if !ok {
+			break
+		}
+		return makeTakeWhile(s), []int{5}, false
 	}
 	// not a ply method
 	return nil, nil, false
@@ -295,7 +305,7 @@ func makePlyMethod(id plyId, typ Type) *Func {
 }
 
 func makeFilter(styp *Slice) *Func {
-	// func(T) bool)
+	// func(T) bool
 	predSig := &Signature{
 		params:  NewTuple(NewVar(token.NoPos, nil, "", styp.Elem())),
 		results: NewTuple(NewVar(token.NoPos, nil, "", Typ[Bool])),
@@ -312,6 +322,20 @@ func makeReverse(styp *Slice) *Func {
 	// ([]T).reverse() []T
 	return NewFunc(token.NoPos, nil, "reverse", &Signature{
 		recv:    NewVar(token.NoPos, nil, "", styp),
+		results: NewTuple(NewVar(token.NoPos, nil, "", styp)),
+	})
+}
+
+func makeTakeWhile(styp *Slice) *Func {
+	// func(T) bool
+	predSig := &Signature{
+		params:  NewTuple(NewVar(token.NoPos, nil, "", styp.Elem())),
+		results: NewTuple(NewVar(token.NoPos, nil, "", Typ[Bool])),
+	}
+	// ([]T).takeWhile(func(T) bool) []T
+	return NewFunc(token.NoPos, nil, "takeWhile", &Signature{
+		recv:    NewVar(token.NoPos, nil, "", styp),
+		params:  NewTuple(NewVar(token.NoPos, nil, "pred", predSig)),
 		results: NewTuple(NewVar(token.NoPos, nil, "", styp)),
 	})
 }

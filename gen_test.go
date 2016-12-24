@@ -178,6 +178,13 @@ func main() {
 	xs := []int{1, 2, 3}.reverse().reverse()
 	println(xs[0], xs[1], xs[2])
 }`, `1 2 3`},
+
+		"simple takeWhile": {`
+package main
+func main() {
+	xs := []int{2, 4, 5, 6}.takeWhile(func(i int) bool { return i % 2 == 0 })
+	println(len(xs), xs[0], xs[1])
+}`, `2 2 4`},
 	}
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {

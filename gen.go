@@ -55,10 +55,11 @@ var funcGenerators = map[string]genFunc{
 }
 
 var methodGenerators = map[string]genMethod{
-	"filter":  filterGen,
-	"morph":   morphGen,
-	"reduce":  reduceGen,
-	"reverse": reverseGen,
+	"filter":    filterGen,
+	"morph":     morphGen,
+	"reduce":    reduceGen,
+	"reverse":   reverseGen,
+	"takeWhile": takeWhileGen,
 }
 
 // some types may have "unfriendly" names, e.g. "chan int". Need to sanitize
@@ -266,5 +267,47 @@ func reverseGen(fn *ast.SelectorExpr, args []ast.Expr, _ ast.Expr, exprTypes map
 	name = safeIdent("reverse" + T + "slice")
 	code = fmt.Sprintf(reverseTempl, name, T)
 	r = rewriteMethod(name)
+	return
+}
+
+const takeWhileTempl = `
+type %[1]s []%[2]s
+
+func (xs %[1]s) takeWhile(pred func(%[2]s) bool) []%[2]s {
+	var i int
+	for i = range xs {
+		if !pred(xs[i]) {
+			break
+		}
+	}
+	return append([]%[2]s(nil), xs[:i]...)
+}
+`
+
+const takeWhileReassignTempl = `
+type %[1]s []%[2]s
+
+func (xs %[1]s) takeWhile(pred func(%[2]s) bool, reassign []%[2]s) []%[2]s {
+	var i int
+	for i = range xs {
+		if !pred(xs[i]) {
+			break
+		}
+	}
+	return append(reassign[:0], xs[:i]...)
+}
+`
+
+func takeWhileGen(fn *ast.SelectorExpr, args []ast.Expr, reassign ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
+	T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem().String()
+	name = safeIdent("takeWhile" + T + "slice")
+	if reassign != nil {
+		name += "reassign"
+		code = fmt.Sprintf(takeWhileReassignTempl, name, T)
+		r = rewriteMethodReassign(name, reassign)
+	} else {
+		code = fmt.Sprintf(takeWhileTempl, name, T)
+		r = rewriteMethod(name)
+	}
 	return
 }
