@@ -11,6 +11,7 @@ type plyId int
 const (
 	// funcs
 	_Merge plyId = iota
+	_Zip
 	// methods
 	_Filter
 	_Morph
@@ -26,6 +27,7 @@ var predeclaredPlyFuncs = [...]struct {
 	kind     exprKind
 }{
 	_Merge: {"merge", 2, true, expression},
+	_Zip:   {"zip", 3, false, expression},
 }
 
 var predeclaredPlyMethods = [...]struct {
@@ -52,6 +54,8 @@ func (check *Checker) ply(x *operand, call *ast.CallExpr, id plyId) (_ bool) {
 	bin := predeclaredPlyFuncs[id]
 
 	// determine arguments
+	// NOTE: we can always use the standard getter unless one of the
+	// function's arguments is a type expression, as in make/new.
 	var arg getter
 	nargs := len(call.Args)
 	switch id {
@@ -120,6 +124,47 @@ func (check *Checker) ply(x *operand, call *ast.CallExpr, id plyId) (_ bool) {
 		}
 
 		x.mode = value
+		if check.Types != nil {
+			//check.recordPlyType(call.Fun, makeSig(x.typ, x.typ, x.typ))
+		}
+
+	case _Zip:
+		// zip(func(x T, y U) V, xs []T, ys []U) []V
+
+		// y and z must be slices
+		var y operand
+		arg(&y, 1)
+		if y.mode == invalid {
+			return
+		}
+		var z operand
+		arg(&z, 2)
+		if z.mode == invalid {
+			return
+		}
+
+		ts, ok := y.typ.Underlying().(*Slice)
+		if !ok {
+			check.invalidArg(y.pos(), "zip expects slice arguments; found %s", &y)
+			return
+		}
+		us, ok := z.typ.Underlying().(*Slice)
+		if !ok {
+			check.invalidArg(z.pos(), "zip expects slice arguments; found %s", &z)
+			return
+		}
+		// derive T and U from slices rather than function; user is more
+		// likely to have passed the wrong function than the wrong slice
+		T := ts.Elem()
+		U := us.Elem()
+
+		fn := x.typ.Underlying().(*Signature)
+		if fn == nil || fn.Results().Len() != 1 || !Identical(fn, makeSig(fn.Results().At(0).Type(), T, U)) {
+			check.errorf(x.pos(), "cannot use %s as func(%s, %s) T value in argument to reduce", x, T, U)
+			return
+		}
+		x.mode = value
+		x.typ = NewSlice(fn.Results().At(0).Type())
 		if check.Types != nil {
 			//check.recordPlyType(call.Fun, makeSig(x.typ, x.typ, x.typ))
 		}

@@ -17,6 +17,9 @@ type T int
 // U is a generic type.
 type U int
 
+// V is a generic type.
+type V int
+
 // SliceT is a slice with element type T.
 type SliceT int
 
@@ -80,3 +83,18 @@ func (s SliceT) TakeWhile(pred func(T) bool) SliceT
 // Like append, merge is only valid as an expression, not a statement. In
 // other words, you *must* make use of its return value.
 func Merge(recv, rest ...map[T]U) map[T]U
+
+// Zip calls fn on each successive pair of values in xs and ys and appends the
+// result to a new slice, terminating when either xs or ys is exhausted. That is,
+// if len(xs) == 3 and len(ys) == 4, then the result is equal to:
+//
+//    []V{
+//        fn(xs[0], ys[0]),
+//        fn(xs[1], ys[1]),
+//        fn(xs[2], ys[2]),
+//    }
+//
+// If the result is reassigned to an existing slice of type []V whose capacity
+// is large enough to hold the resulting elements, Zip will reuse that slice's
+// memory.
+func Zip(fn func(T, U) V, xs []T, ys []U) []V

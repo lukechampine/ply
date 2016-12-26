@@ -52,6 +52,7 @@ type genMethod func(*ast.SelectorExpr, []ast.Expr, ast.Expr, map[ast.Expr]types.
 
 var funcGenerators = map[string]genFunc{
 	"merge": mergeGen,
+	"zip":   zipGen,
 }
 
 var methodGenerators = map[string]genMethod{
@@ -112,6 +113,58 @@ func mergeGen(fn *ast.Ident, args []ast.Expr, reassign ast.Expr, exprTypes map[a
 	name = safeIdent("merge" + key + elem)
 	code = fmt.Sprintf(mergeTempl, name, key, elem)
 	r = rewriteFunc(name)
+	return
+}
+
+const zipTempl = `
+func %[1]s(fn func(a %[2]s, b %[3]s) %[4]s, a []%[2]s, b []%[3]s) []%[4]s {
+	var zipped []%[4]s
+	if len(a) < len(b) {
+		zipped = make([]%[4]s, len(a))
+	} else {
+		zipped = make([]%[4]s, len(b))
+	}
+	for i := range zipped {
+		zipped[i] = fn(a[i], b[i])
+	}
+	return zipped
+}
+`
+
+const zipReassignTempl = `
+func %[1]s(fn func(a %[2]s, b %[3]s) %[4]s, a []%[2]s, b []%[3]s, reassign []%[4]s) []%[4]s {
+	var n int = len(a)
+	if len(b) < len(a) {
+		n = len(b)
+	}
+	var zipped []%[4]s
+	if cap(reassign) >= n {
+		zipped = reassign[:n]
+	} else {
+		zipped = make([]%[4]s, n)
+	}
+	for i := range zipped {
+		zipped[i] = fn(a[i], b[i])
+	}
+	return zipped
+}
+`
+
+func zipGen(fn *ast.Ident, args []ast.Expr, reassign ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
+	// determine arg types
+	sig := exprTypes[args[0]].Type.(*types.Signature)
+	T := sig.Params().At(0).Type().String()
+	U := sig.Params().At(1).Type().String()
+	V := sig.Results().At(0).Type().String()
+	name = safeIdent("zip" + T + U + V)
+	if reassign != nil {
+		name += "reassign"
+		code = fmt.Sprintf(zipReassignTempl, name, T, U, V)
+		r = rewriteFuncReassign(name, reassign)
+	} else {
+		code = fmt.Sprintf(zipTempl, name, T, U, V)
+		r = rewriteFunc(name)
+	}
 	return
 }
 

@@ -185,6 +185,16 @@ func main() {
 	xs := []int{2, 4, 5, 6}.takeWhile(func(i int) bool { return i % 2 == 0 })
 	println(len(xs), xs[0], xs[1])
 }`, `2 2 4`},
+
+		"simple zip": {`
+package main
+func main() {
+	xs := []int32{0, 2, 4, 6, 100}
+	ys := []int64{1, 3, 5, 7}
+	add := func(x int32, y int64) int { return int(x) + int(y) }
+	zs := zip(add, xs, ys)
+	println(len(zs), zs[0], zs[1], zs[2], zs[3])
+}`, `4 1 5 9 13`},
 	}
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
