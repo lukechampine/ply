@@ -293,94 +293,59 @@ func (check *Checker) plySpecialMethod(x *operand, call *ast.CallExpr, recv Type
 // of the typical full signature. These calls will be handled later by
 // plySpecialMethod.
 func lookupPlyMethod(T Type, name string) (obj Object, index []int, indirect bool) {
+	// type-check the receiver
+	var s *Slice
 	switch name {
-	case "filter":
+	case "filter", "reverse", "takeWhile", "reduce":
 		// T must be a slice
-		s, ok := T.Underlying().(*Slice)
-		if !ok {
+		if s = T.Underlying().(*Slice); s == nil {
 			break
 		}
-		return makeFilter(s), []int{1}, false
+	}
+
+	switch name {
+	case "filter", "takeWhile":
+		// func(T) bool
+		pred := makeSig(Typ[Bool], s.Elem())
+		// ([]T).filter(func(T) bool) []T
+		return makePlyMethod(name, s, pred)
 
 	case "reverse":
-		// T must be a slice
-		s, ok := T.Underlying().(*Slice)
-		if !ok {
-			break
-		}
-		return makeReverse(s), []int{2}, false
+		// ([]T).reverse() []T
+		return makePlyMethod(name, s)
 
 	// special methods
 
-	case "morph":
-		// T must be a slice
-		_, ok := T.Underlying().(*Slice)
-		if !ok {
-			break
-		}
-		return makePlyMethod(_Morph, T), []int{3}, false
-
-	case "reduce":
-		// T must be a slice
-		_, ok := T.Underlying().(*Slice)
-		if !ok {
-			break
-		}
-		return makePlyMethod(_Reduce, T), []int{4}, false
-
-	case "takeWhile":
-		// T must be a slice
-		s, ok := T.Underlying().(*Slice)
-		if !ok {
-			break
-		}
-		return makeTakeWhile(s), []int{5}, false
+	case "morph", "reduce":
+		return makeSpecialPlyMethod(name, T)
 	}
 	// not a ply method
 	return nil, nil, false
 }
 
-func makePlyMethod(id plyId, typ Type) *Func {
-	return NewFunc(token.NoPos, nil, predeclaredPlyMethods[id].name, &Signature{
+func makePlyMethod(name string, res Type, args ...Type) (*Func, []int, bool) {
+	f := NewFunc(token.NoPos, nil, name, makeSig(res, args...))
+	var i int
+	for i = range predeclaredPlyMethods {
+		if predeclaredPlyMethods[i].name == name {
+			break
+		}
+	}
+	return f, []int{i}, false
+}
+
+func makeSpecialPlyMethod(name string, typ Type) (*Func, []int, bool) {
+	var id int
+	for id = range predeclaredPlyMethods {
+		if predeclaredPlyMethods[id].name == name {
+			break
+		}
+	}
+	f := NewFunc(token.NoPos, nil, predeclaredPlyMethods[id].name, &Signature{
 		// HACK: hide the recv type in the first param. This is because
 		// check.selector will later set recv = nil. (why?)
 		params: NewTuple(NewVar(token.NoPos, nil, "", typ)),
-		ply:    id,
+		ply:    plyId(id),
 	})
-}
-
-func makeFilter(styp *Slice) *Func {
-	// func(T) bool
-	predSig := &Signature{
-		params:  NewTuple(NewVar(token.NoPos, nil, "", styp.Elem())),
-		results: NewTuple(NewVar(token.NoPos, nil, "", Typ[Bool])),
-	}
-	// ([]T).filter(func(T) bool) []T
-	return NewFunc(token.NoPos, nil, "filter", &Signature{
-		recv:    NewVar(token.NoPos, nil, "", styp),
-		params:  NewTuple(NewVar(token.NoPos, nil, "pred", predSig)),
-		results: NewTuple(NewVar(token.NoPos, nil, "", styp)),
-	})
-}
-
-func makeReverse(styp *Slice) *Func {
-	// ([]T).reverse() []T
-	return NewFunc(token.NoPos, nil, "reverse", &Signature{
-		recv:    NewVar(token.NoPos, nil, "", styp),
-		results: NewTuple(NewVar(token.NoPos, nil, "", styp)),
-	})
-}
-
-func makeTakeWhile(styp *Slice) *Func {
-	// func(T) bool
-	predSig := &Signature{
-		params:  NewTuple(NewVar(token.NoPos, nil, "", styp.Elem())),
-		results: NewTuple(NewVar(token.NoPos, nil, "", Typ[Bool])),
-	}
-	// ([]T).takeWhile(func(T) bool) []T
-	return NewFunc(token.NoPos, nil, "takeWhile", &Signature{
-		recv:    NewVar(token.NoPos, nil, "", styp),
-		params:  NewTuple(NewVar(token.NoPos, nil, "pred", predSig)),
-		results: NewTuple(NewVar(token.NoPos, nil, "", styp)),
-	})
+	return f, []int{id}, false
 }
