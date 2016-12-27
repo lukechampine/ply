@@ -82,13 +82,13 @@ will function identically to the `go` command.
 Supported Functions and Methods
 -------------------------------
 
-**Builtins:** `merge`
+**Builtins:** `merge`, `zip`
 
-- Planned: `sort`, `min`/`max`, `repeat`, `replace`, `split`, `uniq`
+- Planned: `sort`, `min`/`max`, `repeat`, `compose`
 
-**Methods:** `filter`, `morph`, `reduce`, `reverse`, `takeWhile`
+**Methods:** `all`, `any`, `filter`, `morph`, `reduce`, `reverse`, `takeWhile`
 
-- Planned: `contains`, `every`, `any`
+- Planned: `contains`, `join`, `replace`, `split`, `uniq`
 
 All functions and methods are documented in the [`ply` pseudo-package](https://godoc.org/github.com/lukechampine/ply/doc).
 

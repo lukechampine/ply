@@ -56,6 +56,8 @@ var funcGenerators = map[string]genFunc{
 }
 
 var methodGenerators = map[string]genMethod{
+	"all":       allGen,
+	"any":       anyGen,
 	"filter":    filterGen,
 	"morph":     morphGen,
 	"reduce":    reduceGen,
@@ -165,6 +167,48 @@ func zipGen(fn *ast.Ident, args []ast.Expr, reassign ast.Expr, exprTypes map[ast
 		code = fmt.Sprintf(zipTempl, name, T, U, V)
 		r = rewriteFunc(name)
 	}
+	return
+}
+
+const allTempl = `
+type %[1]s []%[2]s
+
+func (xs %[1]s) all(pred func(%[2]s) bool) bool {
+	for _, x := range xs {
+		if !pred(x) {
+			return false
+		}
+	}
+	return true
+}
+`
+
+func allGen(fn *ast.SelectorExpr, args []ast.Expr, reassign ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
+	T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem().String()
+	name = safeIdent("all" + T + "slice")
+	code = fmt.Sprintf(allTempl, name, T)
+	r = rewriteMethod(name)
+	return
+}
+
+const anyTempl = `
+type %[1]s []%[2]s
+
+func (xs %[1]s) any(pred func(%[2]s) bool) bool {
+	for _, x := range xs {
+		if pred(x) {
+			return true
+		}
+	}
+	return false
+}
+`
+
+func anyGen(fn *ast.SelectorExpr, args []ast.Expr, reassign ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
+	T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem().String()
+	name = safeIdent("any" + T + "slice")
+	code = fmt.Sprintf(anyTempl, name, T)
+	r = rewriteMethod(name)
 	return
 }
 

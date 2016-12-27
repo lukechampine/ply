@@ -195,6 +195,44 @@ func main() {
 	zs := zip(add, xs, ys)
 	println(len(zs), zs[0], zs[1], zs[2], zs[3])
 }`, `4 1 5 9 13`},
+
+		"simple any": {`
+package main
+func main() {
+	even := func(x int) bool { return x%2 == 0 }
+	xs := []int{1, 3, 4, 7, 9}
+	println(xs.any(even))
+}`, `true`},
+
+		"short-circuit any": {`
+package main
+func main() {
+	loudeven := func(x int) bool {
+		print(x, " ")
+		return x%2 == 0
+	}
+	xs := []int{1, 3, 4, 7, 9}
+	println(xs.any(loudeven))
+}`, `1 3 4 true`},
+
+		"simple all": {`
+package main
+func main() {
+	odd := func(x int) bool { return x%2 == 1 }
+	xs := []int{1, 3, 4, 7, 9}
+	println(xs.all(odd))
+}`, `false`},
+
+		"short-circuit all": {`
+package main
+func main() {
+	loudodd := func(x int) bool {
+		print(x, " ")
+		return x%2 == 1
+	}
+	xs := []int{1, 3, 4, 7, 9}
+	println(xs.all(loudodd))
+}`, `1 3 4 false`},
 	}
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {

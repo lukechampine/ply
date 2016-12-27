@@ -13,6 +13,8 @@ const (
 	_Merge plyId = iota
 	_Zip
 	// methods
+	_All
+	_Any
 	_Filter
 	_Morph
 	_Reduce
@@ -35,6 +37,8 @@ var predeclaredPlyMethods = [...]struct {
 	nargs    int
 	variadic bool
 }{
+	_All:       {"all", 1, false},
+	_Any:       {"any", 1, false},
 	_Filter:    {"filter", 1, false},
 	_Morph:     {"morph", 1, false},
 	_Reduce:    {"reduce", 1, true}, // 1 optional argument
@@ -296,7 +300,7 @@ func lookupPlyMethod(T Type, name string) (obj Object, index []int, indirect boo
 	// type-check the receiver
 	var s *Slice
 	switch name {
-	case "filter", "reverse", "takeWhile", "reduce":
+	case "all", "any", "filter", "reverse", "takeWhile", "reduce":
 		// T must be a slice
 		if s = T.Underlying().(*Slice); s == nil {
 			break
@@ -304,6 +308,12 @@ func lookupPlyMethod(T Type, name string) (obj Object, index []int, indirect boo
 	}
 
 	switch name {
+	case "all", "any":
+		// func(T) bool
+		pred := makeSig(Typ[Bool], s.Elem())
+		// ([]T).any(func(T) bool) bool
+		return makePlyMethod(name, Typ[Bool], pred)
+
 	case "filter", "takeWhile":
 		// func(T) bool
 		pred := makeSig(Typ[Bool], s.Elem())

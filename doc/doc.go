@@ -26,6 +26,14 @@ type SliceT int
 // SliceT is a slice with element type U.
 type SliceU int
 
+// All returns true if all elements of s satisfy pred. It returns as soon as
+// it encounters an element that does not satisfy pred.
+func (s SliceT) All(pred func(T) bool) SliceT
+
+// Any returns true if any elements of s satisfy pred. It returns as soon as
+// it encounters an element that satisfies pred.
+func (s SliceT) Any(pred func(T) bool) SliceT
+
 // Filter returns a new slice containing only the elements of s that satisfy
 // pred. If the result is reassigned to an existing slice of the same type,
 // Filter will reuse that slice's memory. The common case is reassigning to s,
