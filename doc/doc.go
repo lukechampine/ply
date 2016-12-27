@@ -26,6 +26,15 @@ type SliceT int
 // SliceT is a slice with element type U.
 type SliceU int
 
+// MapTU is a map with element type T and key type U.
+type MapTU int
+
+// Contains returns true if m contains e. It is shorthand for:
+//
+//    _, ok := m[e]
+//    return ok
+func (m MapTU) Contains(e T) bool
+
 // All returns true if all elements of s satisfy pred. It returns as soon as
 // it encounters an element that does not satisfy pred.
 func (s SliceT) All(pred func(T) bool) SliceT
@@ -33,6 +42,20 @@ func (s SliceT) All(pred func(T) bool) SliceT
 // Any returns true if any elements of s satisfy pred. It returns as soon as
 // it encounters an element that satisfies pred.
 func (s SliceT) Any(pred func(T) bool) SliceT
+
+// Contains returns true if s contains e. T must be a comparable type; see
+// https://golang.org/ref/spec#Comparison_operators
+//
+// In rare cases, you may only need to compare a non-comparable type to nil,
+// as in:
+//
+//     bs := [][]byte{[]byte("hi"), nil}
+//     hasNil := bs.contains(nil)
+//
+// To get around the non-comparibility of []byte, use Any:
+//
+//     hasNil := bs.any(func(b []byte) bool { return b == nil })
+func (s SliceT) Contains(e T) bool
 
 // Filter returns a new slice containing only the elements of s that satisfy
 // pred. If the result is reassigned to an existing slice of the same type,

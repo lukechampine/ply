@@ -233,6 +233,20 @@ func main() {
 	xs := []int{1, 3, 4, 7, 9}
 	println(xs.all(loudodd))
 }`, `1 3 4 false`},
+
+		"simple contains": {`
+package main
+func main() {
+	xs := []int{1, 3, 4, 7, 9}
+	println(xs.contains(7))
+}`, `true`},
+
+		"contains map": {`
+package main
+func main() {
+	xs := map[int]int{1: 1, 3: 3, 4: 4, 7: 7, 9: 9}
+	println(xs.contains(7))
+}`, `true`},
 	}
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {

@@ -86,9 +86,9 @@ Supported Functions and Methods
 
 - Planned: `sort`, `min`/`max`, `repeat`, `compose`
 
-**Methods:** `all`, `any`, `filter`, `morph`, `reduce`, `reverse`, `takeWhile`
+**Methods:** `all`, `any`, `filter`, `morph`, `reduce`, `reverse`, `takeWhile`, `contains`
 
-- Planned: `contains`, `join`, `replace`, `split`, `uniq`
+- Planned: `join`, `replace`, `split`, `uniq`
 
 All functions and methods are documented in the [`ply` pseudo-package](https://godoc.org/github.com/lukechampine/ply/doc).
 

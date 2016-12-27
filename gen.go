@@ -58,6 +58,7 @@ var funcGenerators = map[string]genFunc{
 var methodGenerators = map[string]genMethod{
 	"all":       allGen,
 	"any":       anyGen,
+	"contains":  containsGen,
 	"filter":    filterGen,
 	"morph":     morphGen,
 	"reduce":    reduceGen,
@@ -208,6 +209,44 @@ func anyGen(fn *ast.SelectorExpr, args []ast.Expr, reassign ast.Expr, exprTypes 
 	T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem().String()
 	name = safeIdent("any" + T + "slice")
 	code = fmt.Sprintf(anyTempl, name, T)
+	r = rewriteMethod(name)
+	return
+}
+
+const containsSliceTempl = `
+type %[1]s []%[2]s
+
+func (xs %[1]s) contains(e %[2]s) bool {
+	for _, x := range xs {
+		if x == e {
+			return true
+		}
+	}
+	return false
+}
+`
+
+const containsMapTempl = `
+type %[1]s map[%[2]s]%[3]s
+
+func (m %[1]s) contains(e %[2]s) bool {
+	_, ok := m[e]
+	return ok
+}
+`
+
+func containsGen(fn *ast.SelectorExpr, args []ast.Expr, reassign ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
+	switch typ := exprTypes[fn.X].Type.Underlying().(type) {
+	case *types.Slice:
+		e := typ.Elem().String()
+		name = safeIdent("contains" + e + "slice")
+		code = fmt.Sprintf(containsSliceTempl, name, e)
+	case *types.Map:
+		e := typ.Elem().String()
+		k := typ.Key().String()
+		name = safeIdent("contains" + e + k + "map")
+		code = fmt.Sprintf(containsMapTempl, name, e, k)
+	}
 	r = rewriteMethod(name)
 	return
 }

@@ -45,7 +45,7 @@ func (s specializer) addDecl(filename, code string) {
 	code = "package " + s.pkg.Name + code
 	f, err := parser.ParseFile(s.fset, "", code, 0)
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 	s.pkg.Files[filename] = f
 }

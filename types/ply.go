@@ -15,6 +15,7 @@ const (
 	// methods
 	_All
 	_Any
+	_Contains
 	_Filter
 	_Morph
 	_Reduce
@@ -39,6 +40,7 @@ var predeclaredPlyMethods = [...]struct {
 }{
 	_All:       {"all", 1, false},
 	_Any:       {"any", 1, false},
+	_Contains:  {"contains", 1, false},
 	_Filter:    {"filter", 1, false},
 	_Morph:     {"morph", 1, false},
 	_Reduce:    {"reduce", 1, true}, // 1 optional argument
@@ -297,38 +299,47 @@ func (check *Checker) plySpecialMethod(x *operand, call *ast.CallExpr, recv Type
 // of the typical full signature. These calls will be handled later by
 // plySpecialMethod.
 func lookupPlyMethod(T Type, name string) (obj Object, index []int, indirect bool) {
-	// type-check the receiver
-	var s *Slice
-	switch name {
-	case "all", "any", "filter", "reverse", "takeWhile", "reduce":
-		// T must be a slice
-		if s = T.Underlying().(*Slice); s == nil {
-			break
-		}
-	}
-
 	switch name {
 	case "all", "any":
-		// func(T) bool
-		pred := makeSig(Typ[Bool], s.Elem())
-		// ([]T).any(func(T) bool) bool
-		return makePlyMethod(name, Typ[Bool], pred)
+		// T must be a slice
+		if s, ok := T.Underlying().(*Slice); ok {
+			// func(T) bool
+			pred := makeSig(Typ[Bool], s.Elem())
+			// ([]T).any(func(T) bool) bool
+			return makePlyMethod(name, Typ[Bool], pred)
+		}
+
+	case "contains":
+		switch t := T.Underlying().(type) {
+		case *Slice:
+			// T must be comparable
+			if Comparable(t.Elem()) {
+				// ([]T).contains(T) bool
+				return makePlyMethod(name, Typ[Bool], t.Elem())
+			}
+		case *Map:
+			// (map[T]U).contains(T) bool
+			return makePlyMethod(name, Typ[Bool], t.Elem())
+		}
 
 	case "filter", "takeWhile":
-		// func(T) bool
-		pred := makeSig(Typ[Bool], s.Elem())
-		// ([]T).filter(func(T) bool) []T
-		return makePlyMethod(name, s, pred)
+		// T must be a slice
+		if s, ok := T.Underlying().(*Slice); ok {
+			// func(T) bool
+			pred := makeSig(Typ[Bool], s.Elem())
+			// ([]T).filter(func(T) bool) []T
+			return makePlyMethod(name, s, pred)
+		}
 
 	case "reverse":
 		// ([]T).reverse() []T
-		return makePlyMethod(name, s)
+		return makePlyMethod(name, T)
 
 	// special methods
-
 	case "morph", "reduce":
 		return makeSpecialPlyMethod(name, T)
 	}
+
 	// not a ply method
 	return nil, nil, false
 }
