@@ -186,6 +186,13 @@ func main() {
 	println(len(xs), xs[0], xs[1])
 }`, `2 2 4`},
 
+		"simple dropWhile": {`
+package main
+func main() {
+	xs := []int{1, 2, 3, 4, 5}.dropWhile(func(i int) bool { return i < 3 })
+	println(xs[0], xs[1], xs[2])
+}`, `3 4 5`},
+
 		"simple zip": {`
 package main
 func main() {

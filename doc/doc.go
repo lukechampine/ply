@@ -49,6 +49,14 @@ func (s SliceT) Any(pred func(T) bool) SliceT
 // As a special case, T may be a slice, map, or function if e is nil.
 func (s SliceT) Contains(e T) bool
 
+// DropWhile returns a new slice omitting the initial elements of s that
+// satisfy pred. That is, unlike Filter, the slice returned by DropWhile is
+// guaranteed to be a contiguous subset of s beginning at the first element
+// that does not satisfy pred. If the result is reassigned to an existing
+// slice of the same type, DropWhile will reuse that slice's memory. As with
+// Filter, be careful when reassigning to large slices.
+func (s SliceT) DropWhile(pred func(T) bool) SliceT
+
 // Filter returns a new slice containing only the elements of s that satisfy
 // pred. If the result is reassigned to an existing slice of the same type,
 // Filter will reuse that slice's memory. The common case is reassigning to s,

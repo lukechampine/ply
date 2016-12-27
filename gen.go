@@ -59,6 +59,7 @@ var methodGenerators = map[string]genMethod{
 	"all":       allGen,
 	"any":       anyGen,
 	"contains":  containsGen,
+	"dropWhile": dropWhileGen,
 	"filter":    filterGen,
 	"morph":     morphGen,
 	"reduce":    reduceGen,
@@ -271,6 +272,48 @@ func containsGen(fn *ast.SelectorExpr, args []ast.Expr, reassign ast.Expr, exprT
 		code = fmt.Sprintf(containsMapTempl, name, e, k)
 	}
 	r = rewriteMethod(name)
+	return
+}
+
+const dropWhileTempl = `
+type %[1]s []%[2]s
+
+func (xs %[1]s) dropWhile(pred func(%[2]s) bool) []%[2]s {
+	var i int
+	for i = range xs {
+		if !pred(xs[i]) {
+			break
+		}
+	}
+	return append([]%[2]s(nil), xs[i:]...)
+}
+`
+
+const dropWhileReassignTempl = `
+type %[1]s []%[2]s
+
+func (xs %[1]s) dropWhile(pred func(%[2]s) bool, reassign []%[2]s) []%[2]s {
+	var i int
+	for i = range xs {
+		if !pred(xs[i]) {
+			break
+		}
+	}
+	return append(reassign[:0], xs[i:]...)
+}
+`
+
+func dropWhileGen(fn *ast.SelectorExpr, args []ast.Expr, reassign ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
+	T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem().String()
+	name = safeIdent("dropWhile" + T + "slice")
+	if reassign != nil {
+		name += "reassign"
+		code = fmt.Sprintf(dropWhileReassignTempl, name, T)
+		r = rewriteMethodReassign(name, reassign)
+	} else {
+		code = fmt.Sprintf(dropWhileTempl, name, T)
+		r = rewriteMethod(name)
+	}
 	return
 }
 

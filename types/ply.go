@@ -16,6 +16,7 @@ const (
 	_All
 	_Any
 	_Contains
+	_DropWhile
 	_Filter
 	_Morph
 	_Reduce
@@ -41,6 +42,7 @@ var predeclaredPlyMethods = [...]struct {
 	_All:       {"all", 1, false},
 	_Any:       {"any", 1, false},
 	_Contains:  {"contains", 1, false},
+	_DropWhile: {"dropWhile", 1, false},
 	_Filter:    {"filter", 1, false},
 	_Morph:     {"morph", 1, false},
 	_Reduce:    {"reduce", 1, true}, // 1 optional argument
@@ -350,7 +352,7 @@ func lookupPlyMethod(T Type, name string) (obj Object, index []int, indirect boo
 			return makePlyMethod(name, Typ[Bool], pred)
 		}
 
-	case "filter", "takeWhile":
+	case "dropWhile", "filter", "takeWhile":
 		// T must be a slice
 		if s, ok := T.Underlying().(*Slice); ok {
 			// func(T) bool

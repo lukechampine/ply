@@ -86,7 +86,7 @@ Supported Functions and Methods
 
 - Planned: `sort`, `min`/`max`, `repeat`, `compose`
 
-**Methods:** `all`, `any`, `filter`, `morph`, `reduce`, `reverse`, `takeWhile`, `contains`
+**Methods:** `all`, `any`, `dropWhile`, `filter`, `morph`, `reduce`, `reverse`, `takeWhile`, `contains`
 
 - Planned: `join`, `replace`, `split`, `uniq`
 
