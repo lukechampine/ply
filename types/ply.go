@@ -221,12 +221,49 @@ func (check *Checker) plySpecialMethod(x *operand, call *ast.CallExpr, recv Type
 	}
 
 	switch id {
+	case _Contains:
+		// NOTE: contains isn't all that special; we just want to give the
+		// user a nice message if they use a non-comparable type. If we tried
+		// to handle this in lookupPlyMethod, they'd just see "foo has no
+		// method contains".
+
+		switch recv := recv.(type) {
+		case *Slice:
+			// ([]T).contains(T) bool
+			T := recv.Elem()
+			check.assignment(x, T, check.sprintf("argument to contains"))
+			if x.mode == invalid {
+				return
+			}
+			// T must be comparable
+			if !Comparable(T) {
+				check.errorf(call.Pos(), "contains is only valid for comparable types (%s does not support ==)", T)
+				return
+			}
+		case *Map:
+			// (map[T]U).contains(T) bool
+			T := recv.Elem()
+			check.assignment(x, T, check.sprintf("argument to contains"))
+			if x.mode == invalid {
+				return
+			}
+		default:
+			check.errorf(call.Pos(), "contains expects slice or map receiver; got %s", recv)
+			return
+		}
+
+		x.mode = value
+		x.typ = Typ[Bool]
+		if check.Types != nil {
+			// TODO: record here?
+		}
+
 	case _Morph:
 		// ([]T).morph(func(T) U) []U
 		s := recv.Underlying().(*Slice) // enforced by lookupPlyMethod
 		fn := x.typ.Underlying().(*Signature)
 		if fn == nil || fn.Params().Len() != 1 || fn.Results().Len() != 1 || !Identical(fn.Params().At(0).Type(), s.Elem()) {
-			check.errorf(x.pos(), "cannot use %s as func(%s) T value in argument to morph", x, s.Elem())
+			check.invalidArg(x.pos(), "cannot use %s as func(%s) T value in argument to morph", x, s.Elem())
 			return
 		}
 
@@ -246,12 +283,12 @@ func (check *Checker) plySpecialMethod(x *operand, call *ast.CallExpr, recv Type
 		fn := x.typ.Underlying().(*Signature)
 		T := recv.Underlying().(*Slice).Elem() // enforced by lookupPlyMethod
 		if fn == nil || fn.Params().Len() != 2 || fn.Results().Len() != 1 {
-			check.errorf(x.pos(), "cannot use %s as func(T, %s) T value in argument to reduce", x, T)
+			check.invalidArg(x.pos(), "cannot use %s as func(T, %s) T value in argument to reduce", x, T)
 			return
 		}
 		U := fn.Results().At(0).Type()
 		if !Identical(fn.Params().At(0).Type(), U) || !Identical(fn.Params().At(1).Type(), T) || !Identical(fn.Results().At(0).Type(), U) {
-			check.errorf(x.pos(), "cannot use %s as func(%s, %s) %s value in argument to reduce", x, U, T, U)
+			check.invalidArg(x.pos(), "cannot use %s as func(%s, %s) %s value in argument to reduce", x, U, T, U)
 			return
 		}
 
@@ -269,13 +306,13 @@ func (check *Checker) plySpecialMethod(x *operand, call *ast.CallExpr, recv Type
 					return
 				}
 			} else if !Identical(y.typ, U) {
-				check.errorf(y.pos(), "cannot use %s as initial %s value of reducer func(%s, %s) %s", &y, U, U, T, U)
+				check.invalidArg(y.pos(), "cannot use %s as initial %s value of reducer func(%s, %s) %s", &y, U, U, T, U)
 				return
 			}
 		} else {
 			// if no initial value is provided, then T and U must be identical
 			if !Identical(T, U) {
-				check.errorf(x.pos(), "cannot use %s as func(%s, %s) %s value in argument to reduce", x, T, T, T)
+				check.invalidArg(x.pos(), "cannot use %s as func(%s, %s) %s value in argument to reduce", x, T, T, T)
 				return
 			}
 		}
@@ -309,19 +346,6 @@ func lookupPlyMethod(T Type, name string) (obj Object, index []int, indirect boo
 			return makePlyMethod(name, Typ[Bool], pred)
 		}
 
-	case "contains":
-		switch t := T.Underlying().(type) {
-		case *Slice:
-			// T must be comparable
-			if Comparable(t.Elem()) {
-				// ([]T).contains(T) bool
-				return makePlyMethod(name, Typ[Bool], t.Elem())
-			}
-		case *Map:
-			// (map[T]U).contains(T) bool
-			return makePlyMethod(name, Typ[Bool], t.Elem())
-		}
-
 	case "filter", "takeWhile":
 		// T must be a slice
 		if s, ok := T.Underlying().(*Slice); ok {
@@ -336,7 +360,7 @@ func lookupPlyMethod(T Type, name string) (obj Object, index []int, indirect boo
 		return makePlyMethod(name, T)
 
 	// special methods
-	case "morph", "reduce":
+	case "contains", "morph", "reduce":
 		return makeSpecialPlyMethod(name, T)
 	}
 
