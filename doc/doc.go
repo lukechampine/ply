@@ -110,6 +110,18 @@ func (s SliceT) Reverse() SliceT
 // reassigning to large slices.
 func (s SliceT) TakeWhile(pred func(T) bool) SliceT
 
+// Max returns the larger of x or y, as determined by the > operator. T must
+// be an ordered type; see https://golang.org/ref/spec#Comparison_operators
+//
+// If x and y are constants, then the result of Max is also a constant.
+func Max(x, y T) T
+
+// Min returns the smaller of x or y, as determined by the > operator. T must
+// be an ordered type; see https://golang.org/ref/spec#Comparison_operators
+//
+// If x and y are constants, then the result of Min is also a constant.
+func Min(x, y T) T
+
 // Merge copies the contents of each map in rest into recv and returns it. If
 // recv is nil, a new map will be allocated to hold the contents. Thus it is
 // idiomatic to write:

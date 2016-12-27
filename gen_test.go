@@ -261,6 +261,17 @@ func main() {
 	xs := [][]byte{[]byte("foo"), nil}
 	println(xs.contains(nil))
 }`, `true`},
+
+		"max/min": {`
+package main
+import "fmt"
+func main() {
+	const c = max(1, 1 << min(4, 100))
+	i := -0.1
+	var v = min(c, i)
+	const s = max("foo", "bar")
+	fmt.Println(c, v, s)
+}`, `16 -0.1 foo`},
 	}
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {

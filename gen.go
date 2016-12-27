@@ -52,6 +52,8 @@ type genMethod func(*ast.SelectorExpr, []ast.Expr, ast.Expr, map[ast.Expr]types.
 
 var funcGenerators = map[string]genFunc{
 	"merge": mergeGen,
+	"max":   maxGen,
+	"min":   minGen,
 	"zip":   zipGen,
 }
 
@@ -119,6 +121,40 @@ func mergeGen(fn *ast.Ident, args []ast.Expr, reassign ast.Expr, exprTypes map[a
 	}
 	name = safeIdent("merge" + key + elem)
 	code = fmt.Sprintf(mergeTempl, name, key, elem)
+	r = rewriteFunc(name)
+	return
+}
+
+const maxTempl = `
+func %[1]s(a, b %[2]s) %[2]s {
+	if a > b {
+		return a
+	}
+	return b
+}
+`
+
+func maxGen(fn *ast.Ident, args []ast.Expr, reassign ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
+	T := exprTypes[args[0]].Type.Underlying().String()
+	name = safeIdent("max" + T)
+	code = fmt.Sprintf(maxTempl, name, T)
+	r = rewriteFunc(name)
+	return
+}
+
+const minTempl = `
+func %[1]s(a, b %[2]s) %[2]s {
+	if a < b {
+		return a
+	}
+	return b
+}
+`
+
+func minGen(fn *ast.Ident, args []ast.Expr, reassign ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
+	T := exprTypes[args[0]].Type.Underlying().String()
+	name = safeIdent("min" + T)
+	code = fmt.Sprintf(minTempl, name, T)
 	r = rewriteFunc(name)
 	return
 }

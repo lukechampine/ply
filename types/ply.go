@@ -2,6 +2,7 @@ package types
 
 import (
 	"go/ast"
+	"go/constant"
 	"go/token"
 )
 
@@ -11,6 +12,8 @@ type plyId int
 const (
 	// funcs
 	_Merge plyId = iota
+	_Max
+	_Min
 	_Zip
 	// methods
 	_All
@@ -31,6 +34,8 @@ var predeclaredPlyFuncs = [...]struct {
 	kind     exprKind
 }{
 	_Merge: {"merge", 2, true, expression},
+	_Max:   {"max", 2, false, expression},
+	_Min:   {"min", 2, false, expression},
 	_Zip:   {"zip", 3, false, expression},
 }
 
@@ -134,6 +139,62 @@ func (check *Checker) ply(x *operand, call *ast.CallExpr, id plyId) (_ bool) {
 		x.mode = value
 		if check.Types != nil {
 			//check.recordPlyType(call.Fun, makeSig(x.typ, x.typ, x.typ))
+		}
+
+	case _Max, _Min:
+		// max(x, y T) T
+		// min(x, y T) T
+		var y operand
+		arg(&y, 1)
+		if y.mode == invalid {
+			return
+		}
+
+		// convert or check untyped arguments
+		switch xu, yu := isUntyped(x.typ), isUntyped(y.typ); {
+		case !xu && !yu:
+			// x and y are typed => nothing to do
+		case xu && !yu:
+			// only x is untyped => convert to type of y
+			check.convertUntyped(x, y.typ)
+		case !xu && yu:
+			// only y is untyped => convert to type of x
+			check.convertUntyped(&y, x.typ)
+		case xu && yu:
+			// x and y are untyped => check for invalid shift
+			if x.mode != y.mode && (x.mode == constant_ || y.mode == constant_) {
+				// if x xor y is not constant (possible because it contains a
+				// shift that is yet untyped), convert both of them to float64
+				// (this will result in an error because shifts of floats are
+				// not permitted)
+				check.convertUntyped(x, Typ[Float64])
+				check.convertUntyped(&y, Typ[Float64])
+			}
+		}
+		if x.mode == invalid || y.mode == invalid {
+			return
+		}
+
+		// the argument types must be ordered
+		if !isOrdered(x.typ) {
+			check.invalidArg(x.pos(), "%s is not orderable", x.typ)
+			return
+		}
+
+		// the argument types must be identical
+		if !Identical(x.typ, y.typ) {
+			check.invalidArg(x.pos(), "mismatched types %s and %s", x.typ, y.typ)
+			return
+		}
+
+		// if both arguments are constants, the result is a constant
+		if x.mode == constant_ && y.mode == constant_ {
+			ylarger := constant.Compare(y.val, token.GTR, x.val)
+			if ylarger && id == _Max || !ylarger && id == _Min {
+				x.val = y.val
+			}
+		} else {
+			x.mode = value
 		}
 
 	case _Zip:

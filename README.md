@@ -82,9 +82,9 @@ will function identically to the `go` command.
 Supported Functions and Methods
 -------------------------------
 
-**Builtins:** `merge`, `zip`
+**Builtins:** `max`, `merge`, `min`, `zip`
 
-- Planned: `sort`, `min`/`max`, `repeat`, `compose`
+- Planned: `sort`, `repeat`, `compose`
 
 **Methods:** `all`, `any`, `dropWhile`, `filter`, `fold`, `morph`, `reverse`, `takeWhile`, `contains`
 

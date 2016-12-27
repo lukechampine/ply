@@ -63,6 +63,20 @@ func (s specializer) Visit(node ast.Node) ast.Visitor {
 		switch fn := n.Fun.(type) {
 		case *ast.Ident:
 			if gen, ok := funcGenerators[fn.Name]; ok {
+				if v := s.types[n].Value; v != nil {
+					// some functions (namely max/min) may evaluate to a
+					// constant, in which case we should replace the call with
+					// a constant expression.
+					//
+					// NOTE: This is a bit of a hack, since n is still
+					// technically a CallExpr. Ideally we would rewrite it to
+					// a BasicLit (?), but that would require access to its
+					// parent node.
+					fn.Name = ""
+					n.Args = []ast.Expr{ast.NewIdent(v.ExactString())}
+					break
+				}
+
 				name, code, rewrite := gen(fn, n.Args, s.reassign[n], s.types)
 				s.addDecl(name, code)
 				rewrite(n)
