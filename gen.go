@@ -83,6 +83,9 @@ func safeIdent(s string) string {
 		"{", "",
 		"}", "",
 		";", "",
+		// functions
+		"(", "",
+		")", "",
 		// imports
 		".", "",
 	).Replace(s)
@@ -226,6 +229,19 @@ func (xs %[1]s) contains(e %[2]s) bool {
 }
 `
 
+const containsSliceNilTempl = `
+type %[1]s []%[2]s
+
+func (xs %[1]s) contains(_ %[2]s) bool {
+	for _, x := range xs {
+		if x == nil {
+			return true
+		}
+	}
+	return false
+}
+`
+
 const containsMapTempl = `
 type %[1]s map[%[2]s]%[3]s
 
@@ -240,7 +256,14 @@ func containsGen(fn *ast.SelectorExpr, args []ast.Expr, reassign ast.Expr, exprT
 	case *types.Slice:
 		e := typ.Elem().String()
 		name = safeIdent("contains" + e + "slice")
-		code = fmt.Sprintf(containsSliceTempl, name, e)
+		if !types.Comparable(typ.Elem()) {
+			// if type is not comparable, then the argument must be nil
+			// (otherwise type-check would have failed)
+			name += "nil"
+			code = fmt.Sprintf(containsSliceNilTempl, name, e)
+		} else {
+			code = fmt.Sprintf(containsSliceTempl, name, e)
+		}
 	case *types.Map:
 		e := typ.Elem().String()
 		k := typ.Key().String()

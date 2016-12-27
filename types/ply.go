@@ -235,11 +235,15 @@ func (check *Checker) plySpecialMethod(x *operand, call *ast.CallExpr, recv Type
 			if x.mode == invalid {
 				return
 			}
-			// T must be comparable
-			if !Comparable(T) {
+			// T must be comparable or nil-able; if the latter, x must be nil
+			if !Comparable(T) && !hasNil(T) {
 				check.errorf(call.Pos(), "contains is only valid for comparable types (%s does not support ==)", T)
 				return
+			} else if hasNil(T) && !x.isNil() {
+				check.invalidArg(x.pos(), "%s can only be compared to nil", T)
+				return
 			}
+
 		case *Map:
 			// (map[T]U).contains(T) bool
 			T := recv.Elem()

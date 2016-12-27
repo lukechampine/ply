@@ -247,6 +247,13 @@ func main() {
 	xs := map[int]int{1: 1, 3: 3, 4: 4, 7: 7, 9: 9}
 	println(xs.contains(7))
 }`, `true`},
+
+		"contains nil": {`
+package main
+func main() {
+	xs := [][]byte{[]byte("foo"), nil}
+	println(xs.contains(nil))
+}`, `true`},
 	}
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {

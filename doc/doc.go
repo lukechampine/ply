@@ -46,15 +46,7 @@ func (s SliceT) Any(pred func(T) bool) SliceT
 // Contains returns true if s contains e. T must be a comparable type; see
 // https://golang.org/ref/spec#Comparison_operators
 //
-// In rare cases, you may only need to compare a non-comparable type to nil,
-// as in:
-//
-//     bs := [][]byte{[]byte("hi"), nil}
-//     hasNil := bs.contains(nil)
-//
-// To get around the non-comparibility of []byte, use Any:
-//
-//     hasNil := bs.any(func(b []byte) bool { return b == nil })
+// As a special case, T may be a slice, map, or function if e is nil.
 func (s SliceT) Contains(e T) bool
 
 // Filter returns a new slice containing only the elements of s that satisfy
