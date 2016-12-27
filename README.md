@@ -180,6 +180,26 @@ effects, parallelizing may cause a race condition. So this optimization must
 be specifically requested by the caller via separate identifiers, e.g.
 `pmorph`, `pfilter`, etc.
 
+**Compile-time evaluation:**
+
+A few functions (currently just `max` and `min`) can be evaluated at compile-
+time if their arguments are also known at compile time. This is similar to how
+the builtin `len` and `cap` functions work:
+
+```go
+len([3]int) // known at compile-time; compiles to 3
+
+max(1, min(2, 3)) // known at compile time; compiles to 2
+```
+
+It is also possible to perform compile-time evaluation on certain literals.
+For example:
+
+```go
+[]int{1, 2, 3}.contains(3) // compile to true?
+```
+
+However, this is not currently implemented, and may well be terrible idea.
 
 FAQ
 ---
