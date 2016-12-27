@@ -39,7 +39,7 @@ A similar approach is used to implement generic methods:
 xs := []int{1, 2, 3, 4, 6, 20}
 b := xs.filter(func(x int) bool { return x > 3 }).
         morph(func(x int) bool { return x % 2 == 0 }).
-        reduce(func(acc, x bool) bool { return acc && x }, true)
+        fold(func(x, y bool) bool { return x && y })
 ```
 
 In the above, `b` is true because all the integers in `xs` greater than 3 are
@@ -86,7 +86,7 @@ Supported Functions and Methods
 
 - Planned: `sort`, `min`/`max`, `repeat`, `compose`
 
-**Methods:** `all`, `any`, `dropWhile`, `filter`, `morph`, `reduce`, `reverse`, `takeWhile`, `contains`
+**Methods:** `all`, `any`, `dropWhile`, `filter`, `fold`, `morph`, `reverse`, `takeWhile`, `contains`
 
 - Planned: `join`, `replace`, `split`, `uniq`
 
@@ -152,7 +152,7 @@ Pipelining means chaining together multiple such calls. For example:
 xs := []int{1, 2, 3, 4, 6, 20}
 b := xs.filter(func(x int) bool { return x > 3 }).
         morph(func(x int) bool { return x % 2 == 0 }).
-        reduce(func(acc, x bool) bool { return acc && x }, true)
+        fold(func(acc, x bool) bool { return acc && x })
 ```
 
 Currently, this sequence requires allocating a new slice for the `filter` and
@@ -190,7 +190,7 @@ There are basically two options: runtime generics (via reflection) and
 compile-time generics (via codegen). They both suck for different reasons:
 reflection is slow, and codegen is cumbersome. Ply is an attempt at making
 codegen suck a bit less. You don't need to grapple with magic annotations or
-`go generate`; you can just start using `filter` and `reduce` as though Go had
+`go generate`; you can just start using `filter` and `fold` as though Go had
 always supported them.
 
 **What are the downsides of this approach?**

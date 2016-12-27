@@ -62,7 +62,7 @@ var methodGenerators = map[string]genMethod{
 	"dropWhile": dropWhileGen,
 	"filter":    filterGen,
 	"morph":     morphGen,
-	"reduce":    reduceGen,
+	"fold":      foldGen,
 	"reverse":   reverseGen,
 	"takeWhile": takeWhileGen,
 }
@@ -405,10 +405,10 @@ func morphGen(fn *ast.SelectorExpr, args []ast.Expr, reassign ast.Expr, exprType
 	return
 }
 
-const reduceTempl = `
+const foldTempl = `
 type %[1]s []%[2]s
 
-func (xs %[1]s) reduce(fn func(%[3]s, %[2]s) %[3]s, acc %[3]s) %[3]s {
+func (xs %[1]s) fold(fn func(%[3]s, %[2]s) %[3]s, acc %[3]s) %[3]s {
 	for _, x := range xs {
 		acc = fn(acc, x)
 	}
@@ -416,12 +416,12 @@ func (xs %[1]s) reduce(fn func(%[3]s, %[2]s) %[3]s, acc %[3]s) %[3]s {
 }
 `
 
-const reduce1Templ = `
+const fold1Templ = `
 type %[1]s []%[2]s
 
-func (xs %[1]s) reduce(fn func(%[3]s, %[2]s) %[3]s) %[3]s {
+func (xs %[1]s) fold(fn func(%[3]s, %[2]s) %[3]s) %[3]s {
 	if len(xs) == 0 {
-		panic("reduce of empty slice")
+		panic("fold of empty slice")
 	}
 	acc := xs[0]
 	for _, x := range xs {
@@ -431,16 +431,16 @@ func (xs %[1]s) reduce(fn func(%[3]s, %[2]s) %[3]s) %[3]s {
 }
 `
 
-func reduceGen(fn *ast.SelectorExpr, args []ast.Expr, _ ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
+func foldGen(fn *ast.SelectorExpr, args []ast.Expr, _ ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
 	// determine arg types
 	T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem().String()
 	U := exprTypes[args[0]].Type.(*types.Signature).Params().At(0).Type().String()
 	if len(args) == 1 {
-		name = safeIdent("reduce1" + T + U + "slice")
-		code = fmt.Sprintf(reduce1Templ, name, T, U)
+		name = safeIdent("fold1" + T + U + "slice")
+		code = fmt.Sprintf(fold1Templ, name, T, U)
 	} else if len(args) == 2 {
-		name = safeIdent("reduce" + T + U + "slice")
-		code = fmt.Sprintf(reduceTempl, name, T, U)
+		name = safeIdent("fold" + T + U + "slice")
+		code = fmt.Sprintf(foldTempl, name, T, U)
 	}
 	r = rewriteMethod(name)
 	return

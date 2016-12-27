@@ -90,18 +90,18 @@ func main() {
 	println(xs[0], xs[1], xs[2])
 }`, `false true false`},
 
-		"simple reduce": {`
+		"simple fold": {`
 package main
 func main() {
 	product := func(x, y int) int { return x * y }
-	println([]int{1, 2, 3}.reduce(product, 1))
+	println([]int{1, 2, 3}.fold(product, 1))
 }`, `6`},
 
-		"reduce1": {`
+		"fold1": {`
 package main
 func main() {
 	product := func(x, y int) int { return x * y }
-	println([]int{1, 2, 3}.reduce(product))
+	println([]int{1, 2, 3}.fold(product))
 }`, `6`},
 
 		"named type": {`
@@ -109,7 +109,7 @@ package main
 func main() {
 	type ints []int
 	product := func(x, y int) int { return x * y }
-	println(ints{1, 2, 3}.reduce(product))
+	println(ints{1, 2, 3}.fold(product))
 }`, `6`},
 
 		"method override": {`
@@ -143,7 +143,7 @@ func main() {
 package main
 func main() {
 	xs := [][3]int{{}, {}}
-	n := xs.reduce(func(acc int, a [3]int) int { return acc + len(a) }, 0)
+	n := xs.fold(func(acc int, a [3]int) int { return acc + len(a) }, 0)
 	println(n)
 }`, `6`},
 
@@ -151,7 +151,7 @@ func main() {
 package main
 func main() {
 	xs := []*int{nil, nil}
-	n := xs.reduce(func(b bool, i *int) bool { return b && i == nil }, true)
+	n := xs.fold(func(b bool, i *int) bool { return b && i == nil }, true)
 	println(n)
 }`, `true`},
 
@@ -162,7 +162,7 @@ func main() {
 	even := func(x int) bool { return x%2 == 0 }
 	all := func(acc, x bool) bool { return acc && x }
 	xs := []int{1, 2, 3, 4, 6, 20}
-	println(xs.filter(gt3).morph(even).reduce(all))
+	println(xs.filter(gt3).morph(even).fold(all))
 }`, `true`},
 
 		"reverse": {`

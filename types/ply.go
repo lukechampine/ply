@@ -18,8 +18,8 @@ const (
 	_Contains
 	_DropWhile
 	_Filter
+	_Fold
 	_Morph
-	_Reduce
 	_Reverse
 	_TakeWhile
 )
@@ -44,8 +44,8 @@ var predeclaredPlyMethods = [...]struct {
 	_Contains:  {"contains", 1, false},
 	_DropWhile: {"dropWhile", 1, false},
 	_Filter:    {"filter", 1, false},
+	_Fold:      {"fold", 1, true}, // 1 optional argument
 	_Morph:     {"morph", 1, false},
-	_Reduce:    {"reduce", 1, true}, // 1 optional argument
 	_Reverse:   {"reverse", 0, false},
 	_TakeWhile: {"takeWhile", 1, false},
 }
@@ -168,7 +168,7 @@ func (check *Checker) ply(x *operand, call *ast.CallExpr, id plyId) (_ bool) {
 
 		fn := x.typ.Underlying().(*Signature)
 		if fn == nil || fn.Results().Len() != 1 || !Identical(fn, makeSig(fn.Results().At(0).Type(), T, U)) {
-			check.errorf(x.pos(), "cannot use %s as func(%s, %s) T value in argument to reduce", x, T, U)
+			check.errorf(x.pos(), "cannot use %s as func(%s, %s) T value in argument to zip", x, T, U)
 			return
 		}
 		x.mode = value
@@ -264,37 +264,22 @@ func (check *Checker) plySpecialMethod(x *operand, call *ast.CallExpr, recv Type
 			// TODO: record here?
 		}
 
-	case _Morph:
-		// ([]T).morph(func(T) U) []U
-		s := recv.Underlying().(*Slice) // enforced by lookupPlyMethod
-		fn := x.typ.Underlying().(*Signature)
-		if fn == nil || fn.Params().Len() != 1 || fn.Results().Len() != 1 || !Identical(fn.Params().At(0).Type(), s.Elem()) {
-			check.invalidArg(x.pos(), "cannot use %s as func(%s) T value in argument to morph", x, s.Elem())
-			return
-		}
-
-		x.mode = value
-		x.typ = NewSlice(fn.Results().At(0).Type())
-		if check.Types != nil {
-			// TODO: record here?
-		}
-
-	case _Reduce:
-		// ([]T).reduce(func(U, T) U) U
-		// ([]T).reduce(func(U, T) U, U) U
+	case _Fold:
+		// ([]T).fold(func(U, T) U) U
+		// ([]T).fold(func(U, T) U, U) U
 		if nargs > 2 {
-			check.errorf(call.Pos(), "reduce expects 1 or 2 arguments; got %v", nargs)
+			check.errorf(call.Pos(), "fold expects 1 or 2 arguments; got %v", nargs)
 			return
 		}
 		fn := x.typ.Underlying().(*Signature)
 		T := recv.Underlying().(*Slice).Elem() // enforced by lookupPlyMethod
 		if fn == nil || fn.Params().Len() != 2 || fn.Results().Len() != 1 {
-			check.invalidArg(x.pos(), "cannot use %s as func(T, %s) T value in argument to reduce", x, T)
+			check.invalidArg(x.pos(), "cannot use %s as func(T, %s) T value in argument to fold", x, T)
 			return
 		}
 		U := fn.Results().At(0).Type()
 		if !Identical(fn.Params().At(0).Type(), U) || !Identical(fn.Params().At(1).Type(), T) || !Identical(fn.Results().At(0).Type(), U) {
-			check.invalidArg(x.pos(), "cannot use %s as func(%s, %s) %s value in argument to reduce", x, U, T, U)
+			check.invalidArg(x.pos(), "cannot use %s as func(%s, %s) %s value in argument to fold", x, U, T, U)
 			return
 		}
 
@@ -312,19 +297,34 @@ func (check *Checker) plySpecialMethod(x *operand, call *ast.CallExpr, recv Type
 					return
 				}
 			} else if !Identical(y.typ, U) {
-				check.invalidArg(y.pos(), "cannot use %s as initial %s value of reducer func(%s, %s) %s", &y, U, U, T, U)
+				check.invalidArg(y.pos(), "cannot use %s as initial %s value of fold func(%s, %s) %s", &y, U, U, T, U)
 				return
 			}
 		} else {
 			// if no initial value is provided, then T and U must be identical
 			if !Identical(T, U) {
-				check.invalidArg(x.pos(), "cannot use %s as func(%s, %s) %s value in argument to reduce", x, T, T, T)
+				check.invalidArg(x.pos(), "cannot use %s as func(%s, %s) %s value in argument to fold", x, T, T, T)
 				return
 			}
 		}
 
 		x.mode = value
 		x.typ = U
+		if check.Types != nil {
+			// TODO: record here?
+		}
+
+	case _Morph:
+		// ([]T).morph(func(T) U) []U
+		s := recv.Underlying().(*Slice) // enforced by lookupPlyMethod
+		fn := x.typ.Underlying().(*Signature)
+		if fn == nil || fn.Params().Len() != 1 || fn.Results().Len() != 1 || !Identical(fn.Params().At(0).Type(), s.Elem()) {
+			check.invalidArg(x.pos(), "cannot use %s as func(%s) T value in argument to morph", x, s.Elem())
+			return
+		}
+
+		x.mode = value
+		x.typ = NewSlice(fn.Results().At(0).Type())
 		if check.Types != nil {
 			// TODO: record here?
 		}
@@ -366,7 +366,7 @@ func lookupPlyMethod(T Type, name string) (obj Object, index []int, indirect boo
 		return makePlyMethod(name, T)
 
 	// special methods
-	case "contains", "morph", "reduce":
+	case "contains", "fold", "morph":
 		return makeSpecialPlyMethod(name, T)
 	}
 

@@ -75,17 +75,27 @@ func (s SliceT) DropWhile(pred func(T) bool) SliceT
 // assign the result to a new variable.
 func (s SliceT) Filter(pred func(T) bool) SliceT
 
+// Fold returns the result of repeatedly applying fn to an initial
+// "accumulator" value and each element of s. If no initial value is provided,
+// Fold uses the first element of s. (Note that this implies that T and U are
+// the same type, and that s is not empty.)
+//
+// Fold is implemented as a "left fold," which may affect the result if fn is
+// not associative. Given the example below:
+//
+//    xs := []int{1, 2, 3, 4}
+//    sub := func(x, y int) int { return x - y }
+//    xs.fold(sub)
+//
+// Fold yields ((1 - 2) - 3) - 4 == -8, whereas a "right fold" would instead
+// yield 1 - (2 - (3 - 4)) == -2.
+func (s SliceT) Fold(fn func(U, T) U, acc U) U
+
 // Morph returns a new slice containing the result of applying fn to each
 // element of s. If the result is reassigned to an existing slice whose
 // capacity is at least len(s), Morph will reuse that slice's memory. As with
 // Filter, be careful when reassigning to large slices.
 func (s SliceT) Morph(fn func(T) U) SliceU
-
-// Reduce returns the result of repeatedly applying fn to an initial
-// "accumulator" value and each element of s. If no initial value is provided,
-// Reduce uses the first element of s. (Note that this is only possible when T
-// and U are the same type.)
-func (s SliceT) Reduce(fn func(U, T) U, acc U) U
 
 // Reverse returns a new slice containing the elements of s in reverse order.
 // Reverse never reverses the elements in-place, as it is currently too
