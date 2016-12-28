@@ -69,6 +69,7 @@ var methodGenerators = map[string]genMethod{
 	"morph":     morphGen,
 	"reverse":   reverseGen,
 	"takeWhile": takeWhileGen,
+	"toSet":     toSetGen,
 }
 
 // some types may have "unfriendly" names, e.g. "chan int". Need to sanitize
@@ -639,5 +640,25 @@ func takeWhileGen(fn *ast.SelectorExpr, args []ast.Expr, reassign ast.Expr, expr
 		code = fmt.Sprintf(takeWhileTempl, name, T)
 		r = rewriteMethod(name)
 	}
+	return
+}
+
+const toSetTempl = `
+type %[1]s []%[2]s
+
+func (xs %[1]s) toSet() map[%[2]s]struct{} {
+	set := make(map[%[2]s]struct{})
+	for _, x := range xs {
+		set[x] = struct{}{}
+	}
+	return set
+}
+`
+
+func toSetGen(fn *ast.SelectorExpr, args []ast.Expr, _ ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
+	T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem().String()
+	name = safeIdent("toSet" + T + "slice")
+	code = fmt.Sprintf(toSetTempl, name, T)
+	r = rewriteMethod(name)
 	return
 }

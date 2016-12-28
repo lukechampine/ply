@@ -280,6 +280,14 @@ func main() {
 	ks, es := m.keys(), m.elems()
 	println(ks[0], es[0])
 }`, `1 foo`},
+
+		"simple toSet": {`
+package main
+func main() {
+	xs := []int{1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1}
+	m := xs.toSet()
+	println(len(m))
+}`, `2`},
 	}
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {

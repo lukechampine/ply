@@ -117,6 +117,10 @@ func (s SliceT) Reverse() SliceT
 // reassigning to large slices.
 func (s SliceT) TakeWhile(pred func(T) bool) SliceT
 
+// ToSet returns a map containing the elements of s as keys, each mapped to
+// the empty struct.
+func (s SliceT) ToSet() map[T]struct{}
+
 // Max returns the larger of x or y, as determined by the > operator. T must
 // be an ordered type; see https://golang.org/ref/spec#Comparison_operators
 //

@@ -25,6 +25,7 @@ const (
 	_Morph
 	_Reverse
 	_TakeWhile
+	_ToSet
 )
 
 var predeclaredPlyFuncs = [...]struct {
@@ -53,6 +54,7 @@ var predeclaredPlyMethods = [...]struct {
 	_Morph:     {"morph", 1, false},
 	_Reverse:   {"reverse", 0, false},
 	_TakeWhile: {"takeWhile", 1, false},
+	_ToSet:     {"toSet", 0, false},
 }
 
 func defPredeclaredPlyFuncs() {
@@ -412,27 +414,29 @@ func lookupPlyMethod(T Type, name string) (obj Object, index []int, indirect boo
 	switch t := T.Underlying().(type) {
 	case *Slice:
 		pred := makeSig(Typ[Bool], t.Elem()) // func(T) bool
+		empty := NewStruct(nil, nil)         // struct{}
 		methods = map[string]method{
-			"all":       {[]Type{pred}, Typ[Bool], false}, // ([]T).fn(func(T) bool) bool
-			"any":       {[]Type{pred}, Typ[Bool], false}, // ([]T).fn(func(T) bool) bool
-			"dropWhile": {[]Type{pred}, t, false},         // ([]T).fn(func(T) bool) []T
-			"filter":    {[]Type{pred}, t, false},         // ([]T).fn(func(T) bool) []T
-			"reverse":   {nil, t, false},                  // ([]T).fn() []T
-			"takeWhile": {[]Type{pred}, t, false},         // ([]T).fn(func(T) bool) []T
+			"all":       {[]Type{pred}, Typ[Bool], false},      // ([]T).all(func(T) bool) bool
+			"any":       {[]Type{pred}, Typ[Bool], false},      // ([]T).any(func(T) bool) bool
+			"dropWhile": {[]Type{pred}, t, false},              // ([]T).dropWhile(func(T) bool) []T
+			"filter":    {[]Type{pred}, t, false},              // ([]T).filter(func(T) bool) []T
+			"reverse":   {nil, t, false},                       // ([]T).reverse() []T
+			"takeWhile": {[]Type{pred}, t, false},              // ([]T).takeWhile(func(T) bool) []T
+			"toSet":     {nil, NewMap(t.Elem(), empty), false}, // ([]T).toSet() map[T]struct{}
 
 			// special methods
-			"contains": {nil, nil, true}, // ([]T).fn(T) bool
-			"fold":     {nil, nil, true}, // ([]T).fn(func(U, T) U, U) U
-			"morph":    {nil, nil, true}, // ([]T).fn(func(T) U) []U
+			"contains": {nil, nil, true}, // ([]T).contains(T) bool
+			"fold":     {nil, nil, true}, // ([]T).fold(func(U, T) U, U) U
+			"morph":    {nil, nil, true}, // ([]T).morph(func(T) U) []U
 		}
 
 	case *Map:
 		methods = map[string]method{
-			"elems": {nil, NewSlice(t.Elem()), false}, // (map[T]U).fn() []U
-			"keys":  {nil, NewSlice(t.Key()), false},  // (map[T]U).fn() []T
+			"elems": {nil, NewSlice(t.Elem()), false}, // (map[T]U).elems() []U
+			"keys":  {nil, NewSlice(t.Key()), false},  // (map[T]U).keys() []T
 
 			// special methods
-			"contains": {nil, nil, true}, // (map[T]U).fn(T) bool
+			"contains": {nil, nil, true}, // (map[T]U).contains(T) bool
 		}
 	}
 
