@@ -127,12 +127,6 @@ func (s SliceT) ToSet() map[T]struct{}
 // If x and y are constants, then the result of Max is also a constant.
 func Max(x, y T) T
 
-// Min returns the smaller of x or y, as determined by the > operator. T must
-// be an ordered type; see https://golang.org/ref/spec#Comparison_operators
-//
-// If x and y are constants, then the result of Min is also a constant.
-func Min(x, y T) T
-
 // Merge copies the contents of each map in rest into recv and returns it. If
 // recv is nil, a new map will be allocated to hold the contents. Thus it is
 // idiomatic to write:
@@ -147,6 +141,18 @@ func Min(x, y T) T
 // Like append, merge is only valid as an expression, not a statement. In
 // other words, you *must* make use of its return value.
 func Merge(recv, rest ...map[T]U) map[T]U
+
+// Min returns the smaller of x or y, as determined by the > operator. T must
+// be an ordered type; see https://golang.org/ref/spec#Comparison_operators
+//
+// If x and y are constants, then the result of Min is also a constant.
+func Min(x, y T) T
+
+// Not returns a function with the same signature as fn, but with a negated
+// return value. For example, given an "even" function, not(even) returns an
+// "odd" function. fn may have any number of arguments, but must have a single
+// boolean return value.
+func Not(fn T) T
 
 // Zip calls fn on each successive pair of values in xs and ys and appends the
 // result to a new slice, terminating when either xs or ys is exhausted. That is,

@@ -11,9 +11,10 @@ type plyId int
 
 const (
 	// funcs
-	_Merge plyId = iota
-	_Max
+	_Max plyId = iota
+	_Merge
 	_Min
+	_Not
 	_Zip
 	// methods
 	_All
@@ -34,9 +35,10 @@ var predeclaredPlyFuncs = [...]struct {
 	variadic bool
 	kind     exprKind
 }{
-	_Merge: {"merge", 2, true, expression},
 	_Max:   {"max", 2, false, expression},
+	_Merge: {"merge", 2, true, expression},
 	_Min:   {"min", 2, false, expression},
+	_Not:   {"not", 1, false, expression},
 	_Zip:   {"zip", 3, false, expression},
 }
 
@@ -198,6 +200,17 @@ func (check *Checker) ply(x *operand, call *ast.CallExpr, id plyId) (_ bool) {
 		} else {
 			x.mode = value
 		}
+
+	case _Not:
+		// not(f func(...) bool) func(...) bool
+
+		// f must be a function with a single boolean return value
+		fn, ok := x.typ.Underlying().(*Signature)
+		if !ok || fn.Results().Len() != 1 || !Identical(fn.Results().At(0).Type(), Typ[Bool]) {
+			check.invalidArg(x.pos(), "cannot use %s as func(...) bool value in argument to not", x)
+			return
+		}
+		x.mode = value
 
 	case _Zip:
 		// zip(func(x T, y U) V, xs []T, ys []U) []V

@@ -54,6 +54,7 @@ var funcGenerators = map[string]genFunc{
 	"max":   maxGen,
 	"merge": mergeGen,
 	"min":   minGen,
+	"not":   notGen,
 	"zip":   zipGen,
 }
 
@@ -92,9 +93,27 @@ func safeIdent(s string) string {
 		// functions
 		"(", "",
 		")", "",
+		",", "",
 		// imports
 		".", "",
 	).Replace(s)
+}
+
+const maxTempl = `
+func %[1]s(a, b %[2]s) %[2]s {
+	if a > b {
+		return a
+	}
+	return b
+}
+`
+
+func maxGen(fn *ast.Ident, args []ast.Expr, reassign ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
+	T := exprTypes[args[0]].Type.Underlying().String()
+	name = safeIdent("max" + T)
+	code = fmt.Sprintf(maxTempl, name, T)
+	r = rewriteFunc(name)
+	return
 }
 
 const mergeTempl = `
@@ -128,23 +147,6 @@ func mergeGen(fn *ast.Ident, args []ast.Expr, reassign ast.Expr, exprTypes map[a
 	return
 }
 
-const maxTempl = `
-func %[1]s(a, b %[2]s) %[2]s {
-	if a > b {
-		return a
-	}
-	return b
-}
-`
-
-func maxGen(fn *ast.Ident, args []ast.Expr, reassign ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
-	T := exprTypes[args[0]].Type.Underlying().String()
-	name = safeIdent("max" + T)
-	code = fmt.Sprintf(maxTempl, name, T)
-	r = rewriteFunc(name)
-	return
-}
-
 const minTempl = `
 func %[1]s(a, b %[2]s) %[2]s {
 	if a < b {
@@ -158,6 +160,27 @@ func minGen(fn *ast.Ident, args []ast.Expr, reassign ast.Expr, exprTypes map[ast
 	T := exprTypes[args[0]].Type.Underlying().String()
 	name = safeIdent("min" + T)
 	code = fmt.Sprintf(minTempl, name, T)
+	r = rewriteFunc(name)
+	return
+}
+
+const notTempl = `
+func %[1]s(fn %[2]s) %[2]s {
+	return %[2]s {
+		return !fn(%[3]s)
+	}
+}
+`
+
+func notGen(fn *ast.Ident, args []ast.Expr, reassign ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
+	sig := exprTypes[args[0]].Type.Underlying().(*types.Signature)
+	params := sig.Params().String()
+	callArgs := make([]string, sig.Params().Len())
+	for i := range callArgs {
+		callArgs[i] = sig.Params().At(i).Name()
+	}
+	name = safeIdent("not" + params)
+	code = fmt.Sprintf(notTempl, name, sig.String(), strings.Join(callArgs, ", "))
 	r = rewriteFunc(name)
 	return
 }

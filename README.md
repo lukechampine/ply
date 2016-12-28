@@ -82,7 +82,7 @@ will function identically to the `go` command.
 Supported Functions and Methods
 -------------------------------
 
-**Builtins:** `max`, `merge`, `min`, `zip`
+**Builtins:** `max`, `merge`, `min`, `not`, `zip`
 
 - Planned: `sort`, `repeat`, `compose`
 
@@ -201,6 +201,51 @@ For example:
 ```
 
 However, this is not currently implemented, and may well be terrible idea.
+
+**Function hoisting (planned):**
+
+`not` currently returns a function that wraps its argument. Instead, `not`
+could generate a new top-level function definition, and replace the callsite
+wholesale. For example, given these definitions:
+
+```go
+even := func(i int) bool { return i % 2 == 0 }
+odd := not(even)
+```
+
+The compiled code currently looks like this:
+
+```go
+func not_int(fn func(int) bool) func(int) bool {
+	return func(i int) bool {
+		return !fn(i)
+	}
+}
+
+even := func(i int) bool { return i % 2 == 0 }
+odd := not_int(even)
+```
+
+But we could improve upon this by generating a top-level `not_even` function:
+
+```go
+func not_even(i int) bool {
+	return !even(i)
+}
+
+even := func(i int) bool { return i % 2 == 0 }
+odd := not_even
+```
+
+This is non-trivial, though, because `even` is not in the top-level scope; we
+would need to hoist its definition into the function body of `not_even`.
+Alternatively, we could simply not consider local functions for this
+optimization -- but we'd still need a way to distinguish global functions from
+local functions.
+
+The motivation for this optimization is that the Go compiler is more likely to
+inline top-level functions (AFAIK). Eliminating the overhead of a function
+call could be significant when, say, filtering a large slice.
 
 FAQ
 ---

@@ -288,6 +288,14 @@ func main() {
 	m := xs.toSet()
 	println(len(m))
 }`, `2`},
+
+		"simple not": {`
+package main
+func main() {
+	even := func(i int) bool { return i % 2 == 0 }
+	xs := []int{1, 2, 3}.filter(not(even))
+	println(len(xs), xs[0], xs[1])
+}`, `2 1 3`},
 	}
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
