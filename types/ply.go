@@ -229,9 +229,9 @@ func (check *Checker) ply(x *operand, call *ast.CallExpr, id plyId) (_ bool) {
 		T := ts.Elem()
 		U := us.Elem()
 
-		fn := x.typ.Underlying().(*Signature)
-		if fn == nil || fn.Results().Len() != 1 || !Identical(fn, makeSig(fn.Results().At(0).Type(), T, U)) {
-			check.errorf(x.pos(), "cannot use %s as func(%s, %s) T value in argument to zip", x, T, U)
+		fn, ok := x.typ.Underlying().(*Signature)
+		if !ok || fn.Results().Len() != 1 || !Identical(fn, makeSig(fn.Results().At(0).Type(), T, U)) {
+			check.invalidArg(x.pos(), "cannot use %s as func(%s, %s) T value in argument to zip", x, T, U)
 			return
 		}
 		x.mode = value
@@ -334,9 +334,9 @@ func (check *Checker) plySpecialMethod(x *operand, call *ast.CallExpr, recv Type
 			check.errorf(call.Pos(), "fold expects 1 or 2 arguments; got %v", nargs)
 			return
 		}
-		fn := x.typ.Underlying().(*Signature)
 		T := recv.Underlying().(*Slice).Elem() // enforced by lookupPlyMethod
-		if fn == nil || fn.Params().Len() != 2 || fn.Results().Len() != 1 {
+		fn, ok := x.typ.Underlying().(*Signature)
+		if !ok || fn.Params().Len() != 2 || fn.Results().Len() != 1 {
 			check.invalidArg(x.pos(), "cannot use %s as func(T, %s) T value in argument to fold", x, T)
 			return
 		}
@@ -380,8 +380,8 @@ func (check *Checker) plySpecialMethod(x *operand, call *ast.CallExpr, recv Type
 	case _Morph:
 		// ([]T).morph(func(T) U) []U
 		s := recv.Underlying().(*Slice) // enforced by lookupPlyMethod
-		fn := x.typ.Underlying().(*Signature)
-		if fn == nil || fn.Params().Len() != 1 || fn.Results().Len() != 1 || !Identical(fn.Params().At(0).Type(), s.Elem()) {
+		fn, ok := x.typ.Underlying().(*Signature)
+		if !ok || fn.Params().Len() != 1 || fn.Results().Len() != 1 || !Identical(fn.Params().At(0).Type(), s.Elem()) {
 			check.invalidArg(x.pos(), "cannot use %s as func(%s) T value in argument to morph", x, s.Elem())
 			return
 		}
