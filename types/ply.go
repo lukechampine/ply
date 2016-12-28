@@ -403,59 +403,44 @@ func (check *Checker) plySpecialMethod(x *operand, call *ast.CallExpr, recv Type
 // of the typical full signature. These calls will be handled later by
 // plySpecialMethod.
 func lookupPlyMethod(T Type, name string) (obj Object, index []int, indirect bool) {
-	switch name {
-	case "all", "any":
-		// T must be a slice
-		if s, ok := T.Underlying().(*Slice); ok {
-			// func(T) bool
-			pred := makeSig(Typ[Bool], s.Elem())
-			// ([]T).fn(func(T) bool) bool
-			return makePlyMethod(name, Typ[Bool], pred)
+	type method struct {
+		args    []Type
+		ret     Type
+		special bool
+	}
+	var methods map[string]method
+	switch t := T.Underlying().(type) {
+	case *Slice:
+		pred := makeSig(Typ[Bool], t.Elem()) // func(T) bool
+		methods = map[string]method{
+			"all":       {[]Type{pred}, Typ[Bool], false}, // ([]T).fn(func(T) bool) bool
+			"any":       {[]Type{pred}, Typ[Bool], false}, // ([]T).fn(func(T) bool) bool
+			"dropWhile": {[]Type{pred}, t, false},         // ([]T).fn(func(T) bool) []T
+			"filter":    {[]Type{pred}, t, false},         // ([]T).fn(func(T) bool) []T
+			"reverse":   {nil, t, false},                  // ([]T).fn() []T
+			"takeWhile": {[]Type{pred}, t, false},         // ([]T).fn(func(T) bool) []T
+
+			// special methods
+			"contains": {nil, nil, true}, // ([]T).fn(T) bool
+			"fold":     {nil, nil, true}, // ([]T).fn(func(U, T) U, U) U
+			"morph":    {nil, nil, true}, // ([]T).fn(func(T) U) []U
 		}
 
-	case "dropWhile", "filter", "takeWhile":
-		// T must be a slice
-		if s, ok := T.Underlying().(*Slice); ok {
-			// func(T) bool
-			pred := makeSig(Typ[Bool], s.Elem())
-			// ([]T).fn(func(T) bool) []T
-			return makePlyMethod(name, s, pred)
-		}
+	case *Map:
+		methods = map[string]method{
+			"elems": {nil, NewSlice(t.Elem()), false}, // (map[T]U).fn() []U
+			"keys":  {nil, NewSlice(t.Key()), false},  // (map[T]U).fn() []T
 
-	case "reverse":
-		// T must be a slice
-		if s, ok := T.Underlying().(*Slice); ok {
-			// ([]T).fn() []T
-			return makePlyMethod(name, s)
+			// special methods
+			"contains": {nil, nil, true}, // (map[T]U).fn(T) bool
 		}
+	}
 
-	case "keys":
-		// T must be a map
-		if m, ok := T.Underlying().(*Map); ok {
-			// (map[T]U).fn() []T
-			return makePlyMethod(name, NewSlice(m.Key()))
-		}
-
-	case "elems":
-		// T must be a map
-		if m, ok := T.Underlying().(*Map); ok {
-			// (map[T]U).fn() []U
-			return makePlyMethod(name, NewSlice(m.Elem()))
-		}
-
-	// special methods
-
-	case "fold", "morph":
-		// T must be a slice
-		if s, ok := T.Underlying().(*Slice); ok {
-			return makeSpecialPlyMethod(name, s)
-		}
-	case "contains":
-		// T may be a slice or a map
-		switch T.Underlying().(type) {
-		case *Slice, *Map:
+	if m, ok := methods[name]; ok {
+		if m.special {
 			return makeSpecialPlyMethod(name, T)
 		}
+		return makePlyMethod(name, m.ret, m.args...)
 	}
 
 	// not a ply method

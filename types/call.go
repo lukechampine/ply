@@ -71,6 +71,8 @@ func (check *Checker) call(x *operand, e *ast.CallExpr) exprKind {
 			return statement
 		}
 
+		// NOTE: using != 0 is a bit lazy. It only works because plyId(0)
+		// refers to a ply function, not a method.
 		if sig.ply != 0 {
 			recv := sig.params.At(0).typ
 			if !check.plySpecialMethod(x, e, recv, sig.ply) {
