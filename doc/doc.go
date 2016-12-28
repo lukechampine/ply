@@ -35,6 +35,13 @@ type MapTU int
 //    return ok
 func (m MapTU) Contains(e T) bool
 
+// Elems returns the elements of m. The order of the elements is not
+// specified.
+func (m MapTU) Elems() []U
+
+// Keys returns the keys of m. The order of the keys is not specified.
+func (m MapTU) Keys() []T
+
 // All returns true if all elements of s satisfy pred. It returns as soon as
 // it encounters an element that does not satisfy pred.
 func (s SliceT) All(pred func(T) bool) SliceT

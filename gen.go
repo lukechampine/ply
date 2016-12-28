@@ -51,8 +51,8 @@ type genFunc func(*ast.Ident, []ast.Expr, ast.Expr, map[ast.Expr]types.TypeAndVa
 type genMethod func(*ast.SelectorExpr, []ast.Expr, ast.Expr, map[ast.Expr]types.TypeAndValue) (string, string, rewriter)
 
 var funcGenerators = map[string]genFunc{
-	"merge": mergeGen,
 	"max":   maxGen,
+	"merge": mergeGen,
 	"min":   minGen,
 	"zip":   zipGen,
 }
@@ -62,9 +62,11 @@ var methodGenerators = map[string]genMethod{
 	"any":       anyGen,
 	"contains":  containsGen,
 	"dropWhile": dropWhileGen,
+	"elems":     elemsGen,
 	"filter":    filterGen,
-	"morph":     morphGen,
 	"fold":      foldGen,
+	"keys":      keysGen,
+	"morph":     morphGen,
 	"reverse":   reverseGen,
 	"takeWhile": takeWhileGen,
 }
@@ -353,6 +355,51 @@ func dropWhileGen(fn *ast.SelectorExpr, args []ast.Expr, reassign ast.Expr, expr
 	return
 }
 
+const elemsTempl = `
+type %[1]s map[%[2]s]%[3]s
+
+func (m %[1]s) elems() []%[3]s {
+	es := make([]%[3]s, 0, len(m))
+	for _, e := range m {
+		es = append(es, e)
+	}
+	return es
+}
+`
+
+const elemsReassignTempl = `
+type %[1]s map[%[2]s]%[3]s
+
+func (m %[1]s) elems(reassign []%[3]s) []%[3]s {
+	var es []%[3]s
+	if cap(reassign) >= len(m) {
+		es = reassign[:0]
+	} else {
+		es = make([]%[3]s, 0, len(m))
+	}
+	for _, e := range m {
+		es = append(es, e)
+	}
+	return es
+}
+`
+
+func elemsGen(fn *ast.SelectorExpr, args []ast.Expr, reassign ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
+	mt := exprTypes[fn.X].Type.Underlying().(*types.Map)
+	T := mt.Key().String()
+	U := mt.Elem().String()
+	name = safeIdent("elems" + T + U + "map")
+	if reassign != nil {
+		name += "reassign"
+		code = fmt.Sprintf(elemsReassignTempl, name, T, U)
+		r = rewriteMethodReassign(name, reassign)
+	} else {
+		code = fmt.Sprintf(elemsTempl, name, T, U)
+		r = rewriteMethod(name)
+	}
+	return
+}
+
 const filterTempl = `
 type %[1]s []%[2]s
 
@@ -390,6 +437,92 @@ func filterGen(fn *ast.SelectorExpr, args []ast.Expr, reassign ast.Expr, exprTyp
 		r = rewriteMethodReassign(name, reassign)
 	} else {
 		code = fmt.Sprintf(filterTempl, name, T)
+		r = rewriteMethod(name)
+	}
+	return
+}
+
+const foldTempl = `
+type %[1]s []%[2]s
+
+func (xs %[1]s) fold(fn func(%[3]s, %[2]s) %[3]s, acc %[3]s) %[3]s {
+	for _, x := range xs {
+		acc = fn(acc, x)
+	}
+	return acc
+}
+`
+
+const fold1Templ = `
+type %[1]s []%[2]s
+
+func (xs %[1]s) fold(fn func(%[3]s, %[2]s) %[3]s) %[3]s {
+	if len(xs) == 0 {
+		panic("fold of empty slice")
+	}
+	acc := xs[0]
+	for _, x := range xs {
+		acc = fn(acc, x)
+	}
+	return acc
+}
+`
+
+func foldGen(fn *ast.SelectorExpr, args []ast.Expr, _ ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
+	// determine arg types
+	T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem().String()
+	U := exprTypes[args[0]].Type.(*types.Signature).Params().At(0).Type().String()
+	if len(args) == 1 {
+		name = safeIdent("fold1" + T + U + "slice")
+		code = fmt.Sprintf(fold1Templ, name, T, U)
+	} else if len(args) == 2 {
+		name = safeIdent("fold" + T + U + "slice")
+		code = fmt.Sprintf(foldTempl, name, T, U)
+	}
+	r = rewriteMethod(name)
+	return
+}
+
+const keysTempl = `
+type %[1]s map[%[2]s]%[3]s
+
+func (m %[1]s) keys() []%[2]s {
+	ks := make([]%[2]s, 0, len(m))
+	for k := range m {
+		ks = append(ks, k)
+	}
+	return ks
+}
+`
+
+const keysReassignTempl = `
+type %[1]s map[%[2]s]%[3]s
+
+func (m %[1]s) keys(reassign []%[2]s) []%[2]s {
+	var ks []%[2]s
+	if cap(reassign) >= len(m) {
+		ks = reassign[:0]
+	} else {
+		ks = make([]%[2]s, 0, len(m))
+	}
+	for k := range m {
+		ks = append(ks, k)
+	}
+	return ks
+}
+`
+
+func keysGen(fn *ast.SelectorExpr, args []ast.Expr, reassign ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
+	mt := exprTypes[fn.X].Type.Underlying().(*types.Map)
+	T := mt.Key().String()
+	U := mt.Elem().String()
+	name = safeIdent("keys" + T + U + "map")
+	if reassign != nil {
+		name += "reassign"
+		code = fmt.Sprintf(keysReassignTempl, name, T, U)
+		r = rewriteMethodReassign(name, reassign)
+	} else {
+		code = fmt.Sprintf(keysTempl, name, T, U)
 		r = rewriteMethod(name)
 	}
 	return
@@ -438,47 +571,6 @@ func morphGen(fn *ast.SelectorExpr, args []ast.Expr, reassign ast.Expr, exprType
 		code = fmt.Sprintf(morphTempl, name, T, U)
 		r = rewriteMethod(name)
 	}
-	return
-}
-
-const foldTempl = `
-type %[1]s []%[2]s
-
-func (xs %[1]s) fold(fn func(%[3]s, %[2]s) %[3]s, acc %[3]s) %[3]s {
-	for _, x := range xs {
-		acc = fn(acc, x)
-	}
-	return acc
-}
-`
-
-const fold1Templ = `
-type %[1]s []%[2]s
-
-func (xs %[1]s) fold(fn func(%[3]s, %[2]s) %[3]s) %[3]s {
-	if len(xs) == 0 {
-		panic("fold of empty slice")
-	}
-	acc := xs[0]
-	for _, x := range xs {
-		acc = fn(acc, x)
-	}
-	return acc
-}
-`
-
-func foldGen(fn *ast.SelectorExpr, args []ast.Expr, _ ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
-	// determine arg types
-	T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem().String()
-	U := exprTypes[args[0]].Type.(*types.Signature).Params().At(0).Type().String()
-	if len(args) == 1 {
-		name = safeIdent("fold1" + T + U + "slice")
-		code = fmt.Sprintf(fold1Templ, name, T, U)
-	} else if len(args) == 2 {
-		name = safeIdent("fold" + T + U + "slice")
-		code = fmt.Sprintf(foldTempl, name, T, U)
-	}
-	r = rewriteMethod(name)
 	return
 }
 

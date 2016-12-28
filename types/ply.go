@@ -409,7 +409,7 @@ func lookupPlyMethod(T Type, name string) (obj Object, index []int, indirect boo
 		if s, ok := T.Underlying().(*Slice); ok {
 			// func(T) bool
 			pred := makeSig(Typ[Bool], s.Elem())
-			// ([]T).any(func(T) bool) bool
+			// ([]T).fn(func(T) bool) bool
 			return makePlyMethod(name, Typ[Bool], pred)
 		}
 
@@ -418,17 +418,44 @@ func lookupPlyMethod(T Type, name string) (obj Object, index []int, indirect boo
 		if s, ok := T.Underlying().(*Slice); ok {
 			// func(T) bool
 			pred := makeSig(Typ[Bool], s.Elem())
-			// ([]T).filter(func(T) bool) []T
+			// ([]T).fn(func(T) bool) []T
 			return makePlyMethod(name, s, pred)
 		}
 
 	case "reverse":
-		// ([]T).reverse() []T
-		return makePlyMethod(name, T)
+		// T must be a slice
+		if s, ok := T.Underlying().(*Slice); ok {
+			// ([]T).fn() []T
+			return makePlyMethod(name, s)
+		}
+
+	case "keys":
+		// T must be a map
+		if m, ok := T.Underlying().(*Map); ok {
+			// (map[T]U).fn() []T
+			return makePlyMethod(name, NewSlice(m.Key()))
+		}
+
+	case "elems":
+		// T must be a map
+		if m, ok := T.Underlying().(*Map); ok {
+			// (map[T]U).fn() []U
+			return makePlyMethod(name, NewSlice(m.Elem()))
+		}
 
 	// special methods
-	case "contains", "fold", "morph":
-		return makeSpecialPlyMethod(name, T)
+
+	case "fold", "morph":
+		// T must be a slice
+		if s, ok := T.Underlying().(*Slice); ok {
+			return makeSpecialPlyMethod(name, s)
+		}
+	case "contains":
+		// T may be a slice or a map
+		switch T.Underlying().(type) {
+		case *Slice, *Map:
+			return makeSpecialPlyMethod(name, T)
+		}
 	}
 
 	// not a ply method

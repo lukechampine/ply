@@ -272,6 +272,14 @@ func main() {
 	const s = max("foo", "bar")
 	fmt.Println(c, v, s)
 }`, `16 -0.1 foo`},
+
+		"simple keys/elems": {`
+package main
+func main() {
+	m := map[int]string{1: "foo"}
+	ks, es := m.keys(), m.elems()
+	println(ks[0], es[0])
+}`, `1 foo`},
 	}
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
