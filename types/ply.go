@@ -305,7 +305,7 @@ func (check *Checker) plySpecialMethod(x *operand, call *ast.CallExpr, recv Type
 		// to handle this in lookupPlyMethod, they'd just see "foo has no
 		// method contains".
 
-		switch recv := recv.(type) {
+		switch recv := recv.Underlying().(type) {
 		case *Slice:
 			// ([]T).contains(T) bool
 			T := recv.Elem()
@@ -330,8 +330,7 @@ func (check *Checker) plySpecialMethod(x *operand, call *ast.CallExpr, recv Type
 				return
 			}
 		default:
-			check.errorf(call.Pos(), "contains expects slice or map receiver; got %s", recv)
-			return
+			unreachable()
 		}
 
 		x.mode = value
@@ -391,18 +390,46 @@ func (check *Checker) plySpecialMethod(x *operand, call *ast.CallExpr, recv Type
 		}
 
 	case _Morph:
-		// ([]T).morph(func(T) U) []U
-		s := recv.Underlying().(*Slice) // enforced by lookupPlyMethod
-		fn, ok := x.typ.Underlying().(*Signature)
-		if !ok || fn.Params().Len() != 1 || fn.Results().Len() != 1 || !Identical(fn.Params().At(0).Type(), s.Elem()) {
-			check.invalidArg(x.pos(), "cannot use %s as func(%s) T value in argument to morph", x, s.Elem())
-			return
-		}
+		switch recv := recv.Underlying().(type) {
+		case *Slice:
+			// ([]T).morph(func(T) U) []U
+			T := recv.Elem()
+			fn, ok := x.typ.Underlying().(*Signature)
+			if !ok || fn.Params().Len() != 1 || fn.Results().Len() != 1 || !Identical(fn.Params().At(0).Type(), T) {
+				check.invalidArg(x.pos(), "cannot use %s as func(%s) T value in argument to morph", x, T)
+				return
+			}
 
-		x.mode = value
-		x.typ = NewSlice(fn.Results().At(0).Type())
-		if check.Types != nil {
-			// TODO: record here?
+			x.mode = value
+			x.typ = NewSlice(fn.Results().At(0).Type())
+			if check.Types != nil {
+				// TODO: record here?
+			}
+
+		case *Map:
+			// (map[T]U).morph(func(T, U) (V, W) map[V]W
+			T, U := recv.Key(), recv.Elem()
+			fn, ok := x.typ.Underlying().(*Signature)
+			if !ok || fn.Params().Len() != 2 || fn.Results().Len() != 2 || !Identical(fn.Params().At(0).Type(), T) || !Identical(fn.Params().At(1).Type(), U) {
+				check.invalidArg(x.pos(), "cannot use %s as func(%s, %s) (T, U) value in argument to morph", x, T, U)
+				return
+			}
+			V := fn.Results().At(0).Type()
+			W := fn.Results().At(1).Type()
+			// V must be a valid map key type
+			if !Comparable(V) {
+				check.invalidArg(x.pos(), "cannot morph map key type %s to %s: %s is not a comparable type", T, V, V)
+				return
+			}
+
+			x.mode = value
+			x.typ = NewMap(V, W)
+			if check.Types != nil {
+				// TODO: record here?
+			}
+
+		default:
+			unreachable()
 		}
 
 	default:
@@ -444,12 +471,15 @@ func lookupPlyMethod(T Type, name string) (obj Object, index []int, indirect boo
 		}
 
 	case *Map:
+		pred := makeSig(Typ[Bool], t.Key(), t.Elem()) // func(T, U) bool
 		methods = map[string]method{
-			"elems": {nil, NewSlice(t.Elem()), false}, // (map[T]U).elems() []U
-			"keys":  {nil, NewSlice(t.Key()), false},  // (map[T]U).keys() []T
+			"elems":  {nil, NewSlice(t.Elem()), false}, // (map[T]U).elems() []U
+			"filter": {[]Type{pred}, t, false},         // (map[T]U].filter(func(T, U) bool) map[T]U
+			"keys":   {nil, NewSlice(t.Key()), false},  // (map[T]U).keys() []T
 
 			// special methods
 			"contains": {nil, nil, true}, // (map[T]U).contains(T) bool
+			"morph":    {nil, nil, true}, // (map[T]U).morph(func(T, U) (V, W)) map[V]W
 		}
 	}
 

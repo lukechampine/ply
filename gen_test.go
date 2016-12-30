@@ -83,12 +83,29 @@ func main() {
 	println(xs[0], xs[1])
 }`, `2 3`},
 
+		"simple map filter": {`
+package main
+func main() {
+	xs := map[uint8]int8{1: 1, 3: -3, 4: 4, 8: -1, 9: -9}
+	xs = xs.filter(func(u uint8, i int8) bool { return u%2 == 0 && i < 0 })
+	println(len(xs), xs[8])
+}`, `1 -1`},
+
 		"simple morph": {`
 package main
 func main() {
 	xs := []int{1, 2, 3}.morph(func(i int) bool { return i%2 == 0 })
 	println(xs[0], xs[1], xs[2])
 }`, `false true false`},
+
+		"simple map morph": {`
+package main
+import "strconv"
+func main() {
+	xs := map[uint8]int8{1: 1, 2: 2, 3: 3,}
+	ys := xs.morph(func(u uint8, i int8) (int8, string) { return -int8(u), "y"+strconv.Itoa(int(i)) })
+	println(ys[-1], ys[-2], ys[-3])
+}`, `y1 y2 y3`},
 
 		"simple fold": {`
 package main

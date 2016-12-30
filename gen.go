@@ -452,17 +452,43 @@ func (xs %[1]s) filter(pred func(%[2]s) bool, reassign []%[2]s) []%[2]s {
 }
 `
 
-func filterGen(fn *ast.SelectorExpr, args []ast.Expr, reassign ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
-	T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem().String()
-	name = safeIdent("filter" + T + "slice")
-	if reassign != nil {
-		name += "reassign"
-		code = fmt.Sprintf(filterReassignTempl, name, T)
-		r = rewriteMethodReassign(name, reassign)
-	} else {
-		code = fmt.Sprintf(filterTempl, name, T)
-		r = rewriteMethod(name)
+const filterMapTempl = `
+type %[1]s map[%[2]s]%[3]s
+
+func (m %[1]s) filter(pred func(%[2]s, %[3]s) bool) map[%[2]s]%[3]s {
+	if m == nil {
+		return nil
 	}
+	filtered := make(map[%[2]s]%[3]s)
+	for k, e := range m {
+		if pred(k, e) {
+			filtered[k] = e
+		}
+	}
+	return filtered
+}
+`
+
+func filterGen(fn *ast.SelectorExpr, args []ast.Expr, reassign ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
+	switch typ := exprTypes[fn.X].Type.Underlying().(type) {
+	case *types.Slice:
+		T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem().String()
+		name = safeIdent("filter" + T + "slice")
+		if reassign != nil {
+			name += "reassign"
+			code = fmt.Sprintf(filterReassignTempl, name, T)
+			r = rewriteMethodReassign(name, reassign)
+		} else {
+			code = fmt.Sprintf(filterTempl, name, T)
+			r = rewriteMethod(name)
+		}
+	case *types.Map:
+		k := typ.Key().String()
+		e := typ.Elem().String()
+		name = safeIdent("filter" + k + e + "map")
+		code = fmt.Sprintf(filterMapTempl, name, k, e)
+	}
+	r = rewriteMethod(name)
 	return
 }
 
@@ -581,20 +607,47 @@ func (xs %[1]s) morph(fn func(%[2]s) %[3]s, reassign []%[3]s) []%[3]s {
 }
 `
 
-func morphGen(fn *ast.SelectorExpr, args []ast.Expr, reassign ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
-	// determine arg types
-	morphFn := exprTypes[args[0]].Type.Underlying().(*types.Signature)
-	T := morphFn.Params().At(0).Type().String()
-	U := morphFn.Results().At(0).Type().String()
-	name = safeIdent("morph" + T + U + "slice")
-	if reassign != nil {
-		name += "reassign"
-		code = fmt.Sprintf(morphReassignTempl, name, T, U)
-		r = rewriteMethodReassign(name, reassign)
-	} else {
-		code = fmt.Sprintf(morphTempl, name, T, U)
-		r = rewriteMethod(name)
+const morphMapTempl = `
+type %[1]s map[%[2]s]%[3]s
+
+func (m %[1]s) morph(fn func(%[2]s, %[3]s) (%[4]s, %[5]s)) map[%[4]s]%[5]s {
+	if m == nil {
+		return nil
 	}
+	morphed := make(map[%[4]s]%[5]s, len(m))
+	for k, e := range m {
+		mk, me := fn(k, e)
+		morphed[mk] = me
+	}
+	return morphed
+}
+`
+
+func morphGen(fn *ast.SelectorExpr, args []ast.Expr, reassign ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
+	switch typ := exprTypes[fn.X].Type.Underlying().(type) {
+	case *types.Slice:
+		T := typ.Elem().String()
+		morphFn := exprTypes[args[0]].Type.Underlying().(*types.Signature)
+		U := morphFn.Results().At(0).Type().String()
+		name = safeIdent("morph" + T + U + "slice")
+		if reassign != nil {
+			name += "reassign"
+			code = fmt.Sprintf(morphReassignTempl, name, T, U)
+			r = rewriteMethodReassign(name, reassign)
+		} else {
+			code = fmt.Sprintf(morphTempl, name, T, U)
+			r = rewriteMethod(name)
+		}
+	case *types.Map:
+		T := typ.Key().String()
+		U := typ.Elem().String()
+		morphFn := exprTypes[args[0]].Type.Underlying().(*types.Signature)
+		V := morphFn.Results().At(0).Type().String()
+		W := morphFn.Results().At(1).Type().String()
+		name = safeIdent("morph" + T + U + V + W + "map")
+		code = fmt.Sprintf(morphMapTempl, name, T, U, V, W)
+	}
+	r = rewriteMethod(name)
 	return
 }
 

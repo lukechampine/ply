@@ -20,6 +20,9 @@ type U int
 // V is a generic type.
 type V int
 
+// W is a generic type.
+type W int
+
 // SliceT is a slice with element type T.
 type SliceT int
 
@@ -39,8 +42,17 @@ func (m MapTU) Contains(e T) bool
 // specified.
 func (m MapTU) Elems() []U
 
+// Filter returns a new map containing only the key/value pairs of m that
+// satisfy pred.
+func (m MapTU) Filter(pred func(T, U) bool) map[T]U
+
 // Keys returns the keys of m. The order of the keys is not specified.
 func (m MapTU) Keys() []T
+
+// Morph returns a new map containing the result of applying fn to each
+// key/value pair of m. V must be a valid map key type, i.e. a comparable
+// type.
+func (m MapTU) Morph(fn func(T, U) (V, W)) map[V]W
 
 // All returns true if all elements of s satisfy pred. It returns as soon as
 // it encounters an element that does not satisfy pred.
