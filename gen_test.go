@@ -268,7 +268,7 @@ func main() {
 		"contains map": {`
 package main
 func main() {
-	xs := map[int]int{1: 1, 3: 3, 4: 4, 7: 7, 9: 9}
+	xs := map[int]uint{1: 1, 3: 9, 4: 16, 7: 49, 9: 81}
 	println(xs.contains(7))
 }`, `true`},
 

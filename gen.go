@@ -1,9 +1,10 @@
 package main
 
 import (
-	"fmt"
 	"go/ast"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/lukechampine/ply/types"
 )
@@ -73,34 +74,27 @@ var methodGenerators = map[string]genMethod{
 	"toSet":     toSetGen,
 }
 
-// some types may have "unfriendly" names, e.g. "chan int". Need to sanitize
-// these before concatenating them into a new ident.
-func safeIdent(s string) string {
-	return strings.NewReplacer(
-		// slices/arrays
-		"[", "",
-		"]", "",
-		// pointers
-		"*", "ptr",
-		// channels
-		"chan<-", "chan_in",
-		"<-chan", "chan_out",
-		" ", "_",
-		// structs
-		"{", "",
-		"}", "",
-		";", "",
-		// functions
-		"(", "",
-		")", "",
-		",", "",
-		// imports
-		".", "",
-	).Replace(s)
+var rand = uint32(time.Now().UnixNano())
+
+func nextSuffix() string {
+	rand = rand*1664525 + 1013904223 // constants from ioutil.nextSuffix
+	return strconv.Itoa(int(1e9 + rand%1e9))[1:]
+}
+
+func randFnName(name string) string   { return "__plyfn_" + name + "_" + nextSuffix() }
+func randTypeName(name string) string { return "__plytype_" + name + "_" + nextSuffix() }
+
+func specify(templ, name string, typs ...types.Type) string {
+	code := strings.Replace(templ, "#name", name, -1)
+	for i, t := range typs {
+		typVar := 'T' + byte(i) // T, U, V, etc.
+		code = strings.Replace(code, "#"+string(typVar), t.String(), -1)
+	}
+	return code
 }
 
 const maxTempl = `
-func %[1]s(a, b %[2]s) %[2]s {
+func #name(a, b #T) #T {
 	if a > b {
 		return a
 	}
@@ -109,19 +103,19 @@ func %[1]s(a, b %[2]s) %[2]s {
 `
 
 func maxGen(fn *ast.Ident, args []ast.Expr, reassign ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
-	T := exprTypes[args[0]].Type.Underlying().String()
-	name = safeIdent("max" + T)
-	code = fmt.Sprintf(maxTempl, name, T)
+	T := exprTypes[args[0]].Type
+	name = randFnName("max")
+	code = specify(maxTempl, name, T)
 	r = rewriteFunc(name)
 	return
 }
 
 const mergeTempl = `
-func %[1]s(recv map[%[2]s]%[3]s, rest ...map[%[2]s]%[3]s) map[%[2]s]%[3]s {
+func #name(recv map[#T]#U, rest ...map[#T]#U) map[#T]#U {
 	if len(rest) == 0 {
 		return recv
 	} else if recv == nil {
-		recv = make(map[%[2]s]%[3]s, len(rest[0]))
+		recv = make(map[#T]#U, len(rest[0]))
 	}
 	for _, m := range rest {
 		for k, v := range m {
@@ -134,21 +128,21 @@ func %[1]s(recv map[%[2]s]%[3]s, rest ...map[%[2]s]%[3]s) map[%[2]s]%[3]s {
 
 func mergeGen(fn *ast.Ident, args []ast.Expr, reassign ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
 	// seek until we find a non-nil arg
-	var key, elem string
+	var mt *types.Map
 	for _, arg := range args {
-		if mt, ok := exprTypes[arg].Type.(*types.Map); ok {
-			key, elem = mt.Key().String(), mt.Elem().String()
+		var ok bool
+		if mt, ok = exprTypes[arg].Type.(*types.Map); ok {
 			break
 		}
 	}
-	name = safeIdent("merge" + key + elem)
-	code = fmt.Sprintf(mergeTempl, name, key, elem)
+	name = randFnName("merge")
+	code = specify(mergeTempl, name, mt.Key(), mt.Elem())
 	r = rewriteFunc(name)
 	return
 }
 
 const minTempl = `
-func %[1]s(a, b %[2]s) %[2]s {
+func #name(a, b #T) #T {
 	if a < b {
 		return a
 	}
@@ -157,41 +151,42 @@ func %[1]s(a, b %[2]s) %[2]s {
 `
 
 func minGen(fn *ast.Ident, args []ast.Expr, reassign ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
-	T := exprTypes[args[0]].Type.Underlying().String()
-	name = safeIdent("min" + T)
-	code = fmt.Sprintf(minTempl, name, T)
+	T := exprTypes[args[0]].Type
+	name = randFnName("min")
+	code = specify(minTempl, name, T)
 	r = rewriteFunc(name)
 	return
 }
 
 const notTempl = `
-func %[1]s(fn %[2]s) %[2]s {
-	return %[2]s {
-		return !fn(%[3]s)
+func #name(fn #T) #T {
+	return #T {
+		return !fn(#args)
 	}
 }
 `
 
 func notGen(fn *ast.Ident, args []ast.Expr, reassign ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
 	sig := exprTypes[args[0]].Type.Underlying().(*types.Signature)
-	params := sig.Params().String()
 	callArgs := make([]string, sig.Params().Len())
 	for i := range callArgs {
 		callArgs[i] = sig.Params().At(i).Name()
 	}
-	name = safeIdent("not" + params)
-	code = fmt.Sprintf(notTempl, name, sig.String(), strings.Join(callArgs, ", "))
+	name = randFnName("not")
+	code = specify(notTempl, name, sig)
+	// not requires special rewriting for the arguments
+	code = strings.Replace(code, "#args", strings.Join(callArgs, ", "), -1)
 	r = rewriteFunc(name)
 	return
 }
 
 const zipTempl = `
-func %[1]s(fn func(a %[2]s, b %[3]s) %[4]s, a []%[2]s, b []%[3]s) []%[4]s {
-	var zipped []%[4]s
+func #name(fn func(a #T, b #U) #V, a []#T, b []#U) []#V {
+	var zipped []#V
 	if len(a) < len(b) {
-		zipped = make([]%[4]s, len(a))
+		zipped = make([]#V, len(a))
 	} else {
-		zipped = make([]%[4]s, len(b))
+		zipped = make([]#V, len(b))
 	}
 	for i := range zipped {
 		zipped[i] = fn(a[i], b[i])
@@ -201,16 +196,16 @@ func %[1]s(fn func(a %[2]s, b %[3]s) %[4]s, a []%[2]s, b []%[3]s) []%[4]s {
 `
 
 const zipReassignTempl = `
-func %[1]s(fn func(a %[2]s, b %[3]s) %[4]s, a []%[2]s, b []%[3]s, reassign []%[4]s) []%[4]s {
+func #name(fn func(a #T, b #U) #V, a []#T, b []#U, reassign []#V) []#V {
 	var n int = len(a)
 	if len(b) < len(a) {
 		n = len(b)
 	}
-	var zipped []%[4]s
+	var zipped []#V
 	if cap(reassign) >= n {
 		zipped = reassign[:n]
 	} else {
-		zipped = make([]%[4]s, n)
+		zipped = make([]#V, n)
 	}
 	for i := range zipped {
 		zipped[i] = fn(a[i], b[i])
@@ -222,25 +217,25 @@ func %[1]s(fn func(a %[2]s, b %[3]s) %[4]s, a []%[2]s, b []%[3]s, reassign []%[4
 func zipGen(fn *ast.Ident, args []ast.Expr, reassign ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
 	// determine arg types
 	sig := exprTypes[args[0]].Type.(*types.Signature)
-	T := sig.Params().At(0).Type().String()
-	U := sig.Params().At(1).Type().String()
-	V := sig.Results().At(0).Type().String()
-	name = safeIdent("zip" + T + U + V)
+	T := sig.Params().At(0).Type()
+	U := sig.Params().At(1).Type()
+	V := sig.Results().At(0).Type()
 	if reassign != nil {
-		name += "reassign"
-		code = fmt.Sprintf(zipReassignTempl, name, T, U, V)
+		name = randFnName("zip_reassign")
+		code = specify(zipReassignTempl, name, T, U, V)
 		r = rewriteFuncReassign(name, reassign)
 	} else {
-		code = fmt.Sprintf(zipTempl, name, T, U, V)
+		name = randFnName("zip")
+		code = specify(zipTempl, name, T, U, V)
 		r = rewriteFunc(name)
 	}
 	return
 }
 
 const allTempl = `
-type %[1]s []%[2]s
+type #name []#T
 
-func (xs %[1]s) all(pred func(%[2]s) bool) bool {
+func (xs #name) all(pred func(#T) bool) bool {
 	for _, x := range xs {
 		if !pred(x) {
 			return false
@@ -251,17 +246,17 @@ func (xs %[1]s) all(pred func(%[2]s) bool) bool {
 `
 
 func allGen(fn *ast.SelectorExpr, args []ast.Expr, reassign ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
-	T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem().String()
-	name = safeIdent("all" + T + "slice")
-	code = fmt.Sprintf(allTempl, name, T)
+	T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem()
+	name = randTypeName("all_slice")
+	code = specify(allTempl, name, T)
 	r = rewriteMethod(name)
 	return
 }
 
 const anyTempl = `
-type %[1]s []%[2]s
+type #name []#T
 
-func (xs %[1]s) any(pred func(%[2]s) bool) bool {
+func (xs #name) any(pred func(#T) bool) bool {
 	for _, x := range xs {
 		if pred(x) {
 			return true
@@ -272,17 +267,17 @@ func (xs %[1]s) any(pred func(%[2]s) bool) bool {
 `
 
 func anyGen(fn *ast.SelectorExpr, args []ast.Expr, reassign ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
-	T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem().String()
-	name = safeIdent("any" + T + "slice")
-	code = fmt.Sprintf(anyTempl, name, T)
+	T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem()
+	name = randTypeName("any_slice")
+	code = specify(anyTempl, name, T)
 	r = rewriteMethod(name)
 	return
 }
 
 const containsSliceTempl = `
-type %[1]s []%[2]s
+type #name []#T
 
-func (xs %[1]s) contains(e %[2]s) bool {
+func (xs #name) contains(e #T) bool {
 	for _, x := range xs {
 		if x == e {
 			return true
@@ -293,9 +288,9 @@ func (xs %[1]s) contains(e %[2]s) bool {
 `
 
 const containsSliceNilTempl = `
-type %[1]s []%[2]s
+type #name []#T
 
-func (xs %[1]s) contains(_ %[2]s) bool {
+func (xs #name) contains(_ #T) bool {
 	for _, x := range xs {
 		if x == nil {
 			return true
@@ -306,9 +301,9 @@ func (xs %[1]s) contains(_ %[2]s) bool {
 `
 
 const containsMapTempl = `
-type %[1]s map[%[2]s]%[3]s
+type #name map[#T]#U
 
-func (m %[1]s) contains(e %[2]s) bool {
+func (m #name) contains(e #T) bool {
 	_, ok := m[e]
 	return ok
 }
@@ -317,44 +312,42 @@ func (m %[1]s) contains(e %[2]s) bool {
 func containsGen(fn *ast.SelectorExpr, args []ast.Expr, reassign ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
 	switch typ := exprTypes[fn.X].Type.Underlying().(type) {
 	case *types.Slice:
-		e := typ.Elem().String()
-		name = safeIdent("contains" + e + "slice")
-		if !types.Comparable(typ.Elem()) {
+		e := typ.Elem()
+		name = randTypeName("contains_slice")
+		if !types.Comparable(e) {
 			// if type is not comparable, then the argument must be nil
 			// (otherwise type-check would have failed)
-			name += "nil"
-			code = fmt.Sprintf(containsSliceNilTempl, name, e)
+			name = randTypeName("contains_slice_nil")
+			code = specify(containsSliceNilTempl, name, e)
 		} else {
-			code = fmt.Sprintf(containsSliceTempl, name, e)
+			code = specify(containsSliceTempl, name, e)
 		}
 	case *types.Map:
-		e := typ.Elem().String()
-		k := typ.Key().String()
-		name = safeIdent("contains" + e + k + "map")
-		code = fmt.Sprintf(containsMapTempl, name, e, k)
+		name = randTypeName("contains_map")
+		code = specify(containsMapTempl, name, typ.Key(), typ.Elem())
 	}
 	r = rewriteMethod(name)
 	return
 }
 
 const dropWhileTempl = `
-type %[1]s []%[2]s
+type #name []#T
 
-func (xs %[1]s) dropWhile(pred func(%[2]s) bool) []%[2]s {
+func (xs #name) dropWhile(pred func(#T) bool) []#T {
 	var i int
 	for i = range xs {
 		if !pred(xs[i]) {
 			break
 		}
 	}
-	return append([]%[2]s(nil), xs[i:]...)
+	return append([]#T(nil), xs[i:]...)
 }
 `
 
 const dropWhileReassignTempl = `
-type %[1]s []%[2]s
+type #name []#T
 
-func (xs %[1]s) dropWhile(pred func(%[2]s) bool, reassign []%[2]s) []%[2]s {
+func (xs #name) dropWhile(pred func(#T) bool, reassign []#T) []#T {
 	var i int
 	for i = range xs {
 		if !pred(xs[i]) {
@@ -366,24 +359,24 @@ func (xs %[1]s) dropWhile(pred func(%[2]s) bool, reassign []%[2]s) []%[2]s {
 `
 
 func dropWhileGen(fn *ast.SelectorExpr, args []ast.Expr, reassign ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
-	T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem().String()
-	name = safeIdent("dropWhile" + T + "slice")
+	T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem()
 	if reassign != nil {
-		name += "reassign"
-		code = fmt.Sprintf(dropWhileReassignTempl, name, T)
+		name = randTypeName("dropWhile_slice_reassign")
+		code = specify(dropWhileReassignTempl, name, T)
 		r = rewriteMethodReassign(name, reassign)
 	} else {
-		code = fmt.Sprintf(dropWhileTempl, name, T)
+		name = randTypeName("dropWhile_slice")
+		code = specify(dropWhileTempl, name, T)
 		r = rewriteMethod(name)
 	}
 	return
 }
 
 const elemsTempl = `
-type %[1]s map[%[2]s]%[3]s
+type #name map[#T]#U
 
-func (m %[1]s) elems() []%[3]s {
-	es := make([]%[3]s, 0, len(m))
+func (m #name) elems() []#U {
+	es := make([]#U, 0, len(m))
 	for _, e := range m {
 		es = append(es, e)
 	}
@@ -392,14 +385,14 @@ func (m %[1]s) elems() []%[3]s {
 `
 
 const elemsReassignTempl = `
-type %[1]s map[%[2]s]%[3]s
+type #name map[#T]#U
 
-func (m %[1]s) elems(reassign []%[3]s) []%[3]s {
-	var es []%[3]s
+func (m #name) elems(reassign []#U) []#U {
+	var es []#U
 	if cap(reassign) >= len(m) {
 		es = reassign[:0]
 	} else {
-		es = make([]%[3]s, 0, len(m))
+		es = make([]#U, 0, len(m))
 	}
 	for _, e := range m {
 		es = append(es, e)
@@ -410,25 +403,23 @@ func (m %[1]s) elems(reassign []%[3]s) []%[3]s {
 
 func elemsGen(fn *ast.SelectorExpr, args []ast.Expr, reassign ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
 	mt := exprTypes[fn.X].Type.Underlying().(*types.Map)
-	T := mt.Key().String()
-	U := mt.Elem().String()
-	name = safeIdent("elems" + T + U + "map")
 	if reassign != nil {
-		name += "reassign"
-		code = fmt.Sprintf(elemsReassignTempl, name, T, U)
+		name = randTypeName("elems_map_reassign")
+		code = specify(elemsReassignTempl, name, mt.Key(), mt.Elem())
 		r = rewriteMethodReassign(name, reassign)
 	} else {
-		code = fmt.Sprintf(elemsTempl, name, T, U)
+		name = randTypeName("elems_map")
+		code = specify(elemsTempl, name, mt.Key(), mt.Elem())
 		r = rewriteMethod(name)
 	}
 	return
 }
 
 const filterTempl = `
-type %[1]s []%[2]s
+type #name []#T
 
-func (xs %[1]s) filter(pred func(%[2]s) bool) []%[2]s {
-	var filtered []%[2]s
+func (xs #name) filter(pred func(#T) bool) []#T {
+	var filtered []#T
 	for _, x := range xs {
 		if pred(x) {
 			filtered = append(filtered, x)
@@ -439,9 +430,9 @@ func (xs %[1]s) filter(pred func(%[2]s) bool) []%[2]s {
 `
 
 const filterReassignTempl = `
-type %[1]s []%[2]s
+type #name []#T
 
-func (xs %[1]s) filter(pred func(%[2]s) bool, reassign []%[2]s) []%[2]s {
+func (xs #name) filter(pred func(#T) bool, reassign []#T) []#T {
 	filtered := reassign[:0]
 	for _, x := range xs {
 		if pred(x) {
@@ -453,13 +444,13 @@ func (xs %[1]s) filter(pred func(%[2]s) bool, reassign []%[2]s) []%[2]s {
 `
 
 const filterMapTempl = `
-type %[1]s map[%[2]s]%[3]s
+type #name map[#T]#U
 
-func (m %[1]s) filter(pred func(%[2]s, %[3]s) bool) map[%[2]s]%[3]s {
+func (m #name) filter(pred func(#T, #U) bool) map[#T]#U {
 	if m == nil {
 		return nil
 	}
-	filtered := make(map[%[2]s]%[3]s)
+	filtered := make(map[#T]#U)
 	for k, e := range m {
 		if pred(k, e) {
 			filtered[k] = e
@@ -472,30 +463,27 @@ func (m %[1]s) filter(pred func(%[2]s, %[3]s) bool) map[%[2]s]%[3]s {
 func filterGen(fn *ast.SelectorExpr, args []ast.Expr, reassign ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
 	switch typ := exprTypes[fn.X].Type.Underlying().(type) {
 	case *types.Slice:
-		T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem().String()
-		name = safeIdent("filter" + T + "slice")
 		if reassign != nil {
-			name += "reassign"
-			code = fmt.Sprintf(filterReassignTempl, name, T)
+			name = randTypeName("filter_slice_reassign")
+			code = specify(filterReassignTempl, name, typ.Elem())
 			r = rewriteMethodReassign(name, reassign)
 		} else {
-			code = fmt.Sprintf(filterTempl, name, T)
+			name = randTypeName("filter_slice")
+			code = specify(filterTempl, name, typ.Elem())
 			r = rewriteMethod(name)
 		}
 	case *types.Map:
-		k := typ.Key().String()
-		e := typ.Elem().String()
-		name = safeIdent("filter" + k + e + "map")
-		code = fmt.Sprintf(filterMapTempl, name, k, e)
+		name = randTypeName("filter_map")
+		code = specify(filterMapTempl, name, typ.Key(), typ.Elem())
+		r = rewriteMethod(name)
 	}
-	r = rewriteMethod(name)
 	return
 }
 
 const foldTempl = `
-type %[1]s []%[2]s
+type #name []#T
 
-func (xs %[1]s) fold(fn func(%[3]s, %[2]s) %[3]s, acc %[3]s) %[3]s {
+func (xs #name) fold(fn func(#U, #T) #U, acc #U) #U {
 	for _, x := range xs {
 		acc = fn(acc, x)
 	}
@@ -504,9 +492,9 @@ func (xs %[1]s) fold(fn func(%[3]s, %[2]s) %[3]s, acc %[3]s) %[3]s {
 `
 
 const fold1Templ = `
-type %[1]s []%[2]s
+type #name []#T
 
-func (xs %[1]s) fold(fn func(%[3]s, %[2]s) %[3]s) %[3]s {
+func (xs #name) fold(fn func(#U, #T) #U) #U {
 	if len(xs) == 0 {
 		panic("fold of empty slice")
 	}
@@ -520,24 +508,25 @@ func (xs %[1]s) fold(fn func(%[3]s, %[2]s) %[3]s) %[3]s {
 
 func foldGen(fn *ast.SelectorExpr, args []ast.Expr, _ ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
 	// determine arg types
-	T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem().String()
-	U := exprTypes[args[0]].Type.(*types.Signature).Params().At(0).Type().String()
+	sig := exprTypes[args[0]].Type.(*types.Signature)
+	T := sig.Params().At(1).Type()
+	U := sig.Params().At(0).Type()
 	if len(args) == 1 {
-		name = safeIdent("fold1" + T + U + "slice")
-		code = fmt.Sprintf(fold1Templ, name, T, U)
+		name = randTypeName("fold1_slice")
+		code = specify(fold1Templ, name, T, U)
 	} else if len(args) == 2 {
-		name = safeIdent("fold" + T + U + "slice")
-		code = fmt.Sprintf(foldTempl, name, T, U)
+		name = randTypeName("fold_slice")
+		code = specify(foldTempl, name, T, U)
 	}
 	r = rewriteMethod(name)
 	return
 }
 
 const keysTempl = `
-type %[1]s map[%[2]s]%[3]s
+type #name map[#T]#U
 
-func (m %[1]s) keys() []%[2]s {
-	ks := make([]%[2]s, 0, len(m))
+func (m #name) keys() []#T {
+	ks := make([]#T, 0, len(m))
 	for k := range m {
 		ks = append(ks, k)
 	}
@@ -546,14 +535,14 @@ func (m %[1]s) keys() []%[2]s {
 `
 
 const keysReassignTempl = `
-type %[1]s map[%[2]s]%[3]s
+type #name map[#T]#U
 
-func (m %[1]s) keys(reassign []%[2]s) []%[2]s {
-	var ks []%[2]s
+func (m #name) keys(reassign []#T) []#T {
+	var ks []#T
 	if cap(reassign) >= len(m) {
 		ks = reassign[:0]
 	} else {
-		ks = make([]%[2]s, 0, len(m))
+		ks = make([]#T, 0, len(m))
 	}
 	for k := range m {
 		ks = append(ks, k)
@@ -564,25 +553,23 @@ func (m %[1]s) keys(reassign []%[2]s) []%[2]s {
 
 func keysGen(fn *ast.SelectorExpr, args []ast.Expr, reassign ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
 	mt := exprTypes[fn.X].Type.Underlying().(*types.Map)
-	T := mt.Key().String()
-	U := mt.Elem().String()
-	name = safeIdent("keys" + T + U + "map")
 	if reassign != nil {
-		name += "reassign"
-		code = fmt.Sprintf(keysReassignTempl, name, T, U)
+		name = randTypeName("keys_map_reassign")
+		code = specify(keysReassignTempl, name, mt.Key(), mt.Elem())
 		r = rewriteMethodReassign(name, reassign)
 	} else {
-		code = fmt.Sprintf(keysTempl, name, T, U)
+		name = randTypeName("keys_map")
+		code = specify(keysTempl, name, mt.Key(), mt.Elem())
 		r = rewriteMethod(name)
 	}
 	return
 }
 
 const morphTempl = `
-type %[1]s []%[2]s
+type #name []#T
 
-func (xs %[1]s) morph(fn func(%[2]s) %[3]s) []%[3]s {
-	morphed := make([]%[3]s, len(xs))
+func (xs #name) morph(fn func(#T) #U) []#U {
+	morphed := make([]#U, len(xs))
 	for i := range xs {
 		morphed[i] = fn(xs[i])
 	}
@@ -591,14 +578,14 @@ func (xs %[1]s) morph(fn func(%[2]s) %[3]s) []%[3]s {
 `
 
 const morphReassignTempl = `
-type %[1]s []%[2]s
+type #name []#T
 
-func (xs %[1]s) morph(fn func(%[2]s) %[3]s, reassign []%[3]s) []%[3]s {
-	var morphed []%[3]s
+func (xs #name) morph(fn func(#T) #U, reassign []#U) []#U {
+	var morphed []#U
 	if cap(reassign) >= len(xs) {
 		morphed = reassign[:len(xs)]
 	} else {
-		morphed = make([]%[3]s, len(xs))
+		morphed = make([]#U, len(xs))
 	}
 	for i := range xs {
 		morphed[i] = fn(xs[i])
@@ -608,13 +595,13 @@ func (xs %[1]s) morph(fn func(%[2]s) %[3]s, reassign []%[3]s) []%[3]s {
 `
 
 const morphMapTempl = `
-type %[1]s map[%[2]s]%[3]s
+type #name map[#T]#U
 
-func (m %[1]s) morph(fn func(%[2]s, %[3]s) (%[4]s, %[5]s)) map[%[4]s]%[5]s {
+func (m #name) morph(fn func(#T, #U) (#V, #W)) map[#V]#W {
 	if m == nil {
 		return nil
 	}
-	morphed := make(map[%[4]s]%[5]s, len(m))
+	morphed := make(map[#V]#W, len(m))
 	for k, e := range m {
 		mk, me := fn(k, e)
 		morphed[mk] = me
@@ -624,38 +611,37 @@ func (m %[1]s) morph(fn func(%[2]s, %[3]s) (%[4]s, %[5]s)) map[%[4]s]%[5]s {
 `
 
 func morphGen(fn *ast.SelectorExpr, args []ast.Expr, reassign ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
-	switch typ := exprTypes[fn.X].Type.Underlying().(type) {
+	sig := exprTypes[args[0]].Type.Underlying().(*types.Signature)
+	switch exprTypes[fn.X].Type.Underlying().(type) {
 	case *types.Slice:
-		T := typ.Elem().String()
-		morphFn := exprTypes[args[0]].Type.Underlying().(*types.Signature)
-		U := morphFn.Results().At(0).Type().String()
-		name = safeIdent("morph" + T + U + "slice")
+		T := sig.Params().At(0).Type()
+		U := sig.Results().At(0).Type()
 		if reassign != nil {
-			name += "reassign"
-			code = fmt.Sprintf(morphReassignTempl, name, T, U)
+			name = randTypeName("morph_slice_reassign")
+			code = specify(morphReassignTempl, name, T, U)
 			r = rewriteMethodReassign(name, reassign)
 		} else {
-			code = fmt.Sprintf(morphTempl, name, T, U)
+			name = randTypeName("morph_slice")
+			code = specify(morphTempl, name, T, U)
 			r = rewriteMethod(name)
 		}
 	case *types.Map:
-		T := typ.Key().String()
-		U := typ.Elem().String()
-		morphFn := exprTypes[args[0]].Type.Underlying().(*types.Signature)
-		V := morphFn.Results().At(0).Type().String()
-		W := morphFn.Results().At(1).Type().String()
-		name = safeIdent("morph" + T + U + V + W + "map")
-		code = fmt.Sprintf(morphMapTempl, name, T, U, V, W)
+		T := sig.Params().At(0).Type()
+		U := sig.Params().At(1).Type()
+		V := sig.Results().At(0).Type()
+		W := sig.Results().At(1).Type()
+		name = randTypeName("morph_map")
+		code = specify(morphMapTempl, name, T, U, V, W)
+		r = rewriteMethod(name)
 	}
-	r = rewriteMethod(name)
 	return
 }
 
 const reverseTempl = `
-type %[1]s []%[2]s
+type #name []#T
 
-func (xs %[1]s) reverse() []%[2]s {
-	reversed := make([]%[2]s, len(xs))
+func (xs #name) reverse() []#T {
+	reversed := make([]#T, len(xs))
 	for i := range xs {
 		reversed[i] = xs[len(xs)-1-i]
 	}
@@ -667,34 +653,31 @@ func reverseGen(fn *ast.SelectorExpr, args []ast.Expr, _ ast.Expr, exprTypes map
 	// NOTE: we can't safely use reassign because it may be the same slice
 	// that we're reversing. Since we don't have a way of knowing (slices
 	// don't support ==), we unfortunately cannot ever reuse existing memory.
-	//
-	// However, it should be safe to reverse in-place when called on a slice
-	// literal or as part of a chain.
-	T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem().String()
-	name = safeIdent("reverse" + T + "slice")
-	code = fmt.Sprintf(reverseTempl, name, T)
+	T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem()
+	name = randTypeName("reverse_slice")
+	code = specify(reverseTempl, name, T)
 	r = rewriteMethod(name)
 	return
 }
 
 const takeWhileTempl = `
-type %[1]s []%[2]s
+type #name []#T
 
-func (xs %[1]s) takeWhile(pred func(%[2]s) bool) []%[2]s {
+func (xs #name) takeWhile(pred func(#T) bool) []#T {
 	var i int
 	for i = range xs {
 		if !pred(xs[i]) {
 			break
 		}
 	}
-	return append([]%[2]s(nil), xs[:i]...)
+	return append([]#T(nil), xs[:i]...)
 }
 `
 
 const takeWhileReassignTempl = `
-type %[1]s []%[2]s
+type #name []#T
 
-func (xs %[1]s) takeWhile(pred func(%[2]s) bool, reassign []%[2]s) []%[2]s {
+func (xs #name) takeWhile(pred func(#T) bool, reassign []#T) []#T {
 	var i int
 	for i = range xs {
 		if !pred(xs[i]) {
@@ -706,24 +689,24 @@ func (xs %[1]s) takeWhile(pred func(%[2]s) bool, reassign []%[2]s) []%[2]s {
 `
 
 func takeWhileGen(fn *ast.SelectorExpr, args []ast.Expr, reassign ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
-	T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem().String()
-	name = safeIdent("takeWhile" + T + "slice")
+	T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem()
 	if reassign != nil {
-		name += "reassign"
-		code = fmt.Sprintf(takeWhileReassignTempl, name, T)
+		name = randTypeName("takeWhile_slice_reassign")
+		code = specify(takeWhileReassignTempl, name, T)
 		r = rewriteMethodReassign(name, reassign)
 	} else {
-		code = fmt.Sprintf(takeWhileTempl, name, T)
+		name = randTypeName("takeWhile_slice")
+		code = specify(takeWhileTempl, name, T)
 		r = rewriteMethod(name)
 	}
 	return
 }
 
 const toSetTempl = `
-type %[1]s []%[2]s
+type #name []#T
 
-func (xs %[1]s) toSet() map[%[2]s]struct{} {
-	set := make(map[%[2]s]struct{})
+func (xs #name) toSet() map[#T]struct{} {
+	set := make(map[#T]struct{})
 	for _, x := range xs {
 		set[x] = struct{}{}
 	}
@@ -732,9 +715,9 @@ func (xs %[1]s) toSet() map[%[2]s]struct{} {
 `
 
 func toSetGen(fn *ast.SelectorExpr, args []ast.Expr, _ ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
-	T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem().String()
-	name = safeIdent("toSet" + T + "slice")
-	code = fmt.Sprintf(toSetTempl, name, T)
+	T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem()
+	name = randTypeName("toSet_slice")
+	code = specify(toSetTempl, name, T)
 	r = rewriteMethod(name)
 	return
 }
