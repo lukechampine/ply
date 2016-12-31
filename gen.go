@@ -470,7 +470,7 @@ func (xs #name) fold(fn func(#U, #T) #U) #U {
 		panic("fold of empty slice")
 	}
 	acc := xs[0]
-	for _, x := range xs {
+	for _, x := range xs[1:] {
 		acc = fn(acc, x)
 	}
 	return acc

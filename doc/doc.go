@@ -96,8 +96,9 @@ func (s SliceT) Filter(pred func(T) bool) SliceT
 
 // Fold returns the result of repeatedly applying fn to an initial
 // "accumulator" value and each element of s. If no initial value is provided,
-// Fold uses the first element of s. (Note that this implies that T and U are
-// the same type, and that s is not empty.)
+// Fold uses the first element of s. Note that this implies that T and U are
+// the same type, and that s is not empty. If s is empty and no initial value
+// is provided, Fold panics.
 //
 // Fold is implemented as a "left fold," which may affect the result if fn is
 // not associative. Given the example below:
