@@ -47,11 +47,7 @@ func rewriteFuncReassign(name string, reassign ast.Expr) rewriter {
 	}
 }
 
-type genFunc func(*ast.Ident, []ast.Expr, ast.Expr, map[ast.Expr]types.TypeAndValue) (string, string, rewriter)
-
-type genMethod func(*ast.SelectorExpr, []ast.Expr, ast.Expr, map[ast.Expr]types.TypeAndValue) (string, string, rewriter)
-
-var funcGenerators = map[string]genFunc{
+var funcGenerators = map[string]func(*ast.Ident, []ast.Expr, ast.Expr, map[ast.Expr]types.TypeAndValue) (string, string, rewriter){
 	"max":   maxGen,
 	"merge": mergeGen,
 	"min":   minGen,
@@ -59,7 +55,7 @@ var funcGenerators = map[string]genFunc{
 	"zip":   zipGen,
 }
 
-var methodGenerators = map[string]genMethod{
+var methodGenerators = map[string]func(*ast.SelectorExpr, []ast.Expr, ast.Expr, map[ast.Expr]types.TypeAndValue) (string, string, rewriter){
 	"all":       allGen,
 	"any":       anyGen,
 	"contains":  containsGen,
@@ -93,6 +89,20 @@ func specify(templ, name string, typs ...types.Type) string {
 	return code
 }
 
+func genFunc(templ, fnname string, typs ...types.Type) (name, code string, r rewriter) {
+	name = randFnName(fnname)
+	code = specify(templ, name, typs...)
+	r = rewriteFunc(name)
+	return
+}
+
+func genMethod(templ, methodname string, typs ...types.Type) (name, code string, r rewriter) {
+	name = randFnName(methodname)
+	code = specify(templ, name, typs...)
+	r = rewriteMethod(name)
+	return
+}
+
 const maxTempl = `
 func #name(a, b #T) #T {
 	if a > b {
@@ -104,10 +114,7 @@ func #name(a, b #T) #T {
 
 func maxGen(fn *ast.Ident, args []ast.Expr, reassign ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
 	T := exprTypes[args[0]].Type
-	name = randFnName("max")
-	code = specify(maxTempl, name, T)
-	r = rewriteFunc(name)
-	return
+	return genFunc(maxTempl, "max", T)
 }
 
 const mergeTempl = `
@@ -135,10 +142,7 @@ func mergeGen(fn *ast.Ident, args []ast.Expr, reassign ast.Expr, exprTypes map[a
 			break
 		}
 	}
-	name = randFnName("merge")
-	code = specify(mergeTempl, name, mt.Key(), mt.Elem())
-	r = rewriteFunc(name)
-	return
+	return genFunc(mergeTempl, "merge", mt.Key(), mt.Elem())
 }
 
 const minTempl = `
@@ -152,10 +156,7 @@ func #name(a, b #T) #T {
 
 func minGen(fn *ast.Ident, args []ast.Expr, reassign ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
 	T := exprTypes[args[0]].Type
-	name = randFnName("min")
-	code = specify(minTempl, name, T)
-	r = rewriteFunc(name)
-	return
+	return genFunc(minTempl, "min", T)
 }
 
 const notTempl = `
@@ -172,11 +173,9 @@ func notGen(fn *ast.Ident, args []ast.Expr, reassign ast.Expr, exprTypes map[ast
 	for i := range callArgs {
 		callArgs[i] = sig.Params().At(i).Name()
 	}
-	name = randFnName("not")
-	code = specify(notTempl, name, sig)
-	// not requires special rewriting for the arguments
+	name, code, r = genFunc(notTempl, "not", sig)
+	// not requires an additional rewrite for the arguments
 	code = strings.Replace(code, "#args", strings.Join(callArgs, ", "), -1)
-	r = rewriteFunc(name)
 	return
 }
 
@@ -220,15 +219,11 @@ func zipGen(fn *ast.Ident, args []ast.Expr, reassign ast.Expr, exprTypes map[ast
 	T := sig.Params().At(0).Type()
 	U := sig.Params().At(1).Type()
 	V := sig.Results().At(0).Type()
-	if reassign != nil {
-		name = randFnName("zip_reassign")
-		code = specify(zipReassignTempl, name, T, U, V)
-		r = rewriteFuncReassign(name, reassign)
-	} else {
-		name = randFnName("zip")
-		code = specify(zipTempl, name, T, U, V)
-		r = rewriteFunc(name)
+	if reassign == nil {
+		return genFunc(zipTempl, "zip", T, U, V)
 	}
+	name, code, _ = genFunc(zipReassignTempl, "zip_reassign", T, U, V)
+	r = rewriteFuncReassign(name, reassign)
 	return
 }
 
@@ -247,10 +242,7 @@ func (xs #name) all(pred func(#T) bool) bool {
 
 func allGen(fn *ast.SelectorExpr, args []ast.Expr, reassign ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
 	T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem()
-	name = randTypeName("all_slice")
-	code = specify(allTempl, name, T)
-	r = rewriteMethod(name)
-	return
+	return genMethod(allTempl, "all_slice", T)
 }
 
 const anyTempl = `
@@ -268,10 +260,7 @@ func (xs #name) any(pred func(#T) bool) bool {
 
 func anyGen(fn *ast.SelectorExpr, args []ast.Expr, reassign ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
 	T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem()
-	name = randTypeName("any_slice")
-	code = specify(anyTempl, name, T)
-	r = rewriteMethod(name)
-	return
+	return genMethod(anyTempl, "any_slice", T)
 }
 
 const containsSliceTempl = `
@@ -312,21 +301,16 @@ func (m #name) contains(e #T) bool {
 func containsGen(fn *ast.SelectorExpr, args []ast.Expr, reassign ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
 	switch typ := exprTypes[fn.X].Type.Underlying().(type) {
 	case *types.Slice:
-		e := typ.Elem()
-		name = randTypeName("contains_slice")
-		if !types.Comparable(e) {
+		if T := typ.Elem(); !types.Comparable(T) {
 			// if type is not comparable, then the argument must be nil
 			// (otherwise type-check would have failed)
-			name = randTypeName("contains_slice_nil")
-			code = specify(containsSliceNilTempl, name, e)
+			return genMethod(containsSliceNilTempl, "contains_slice_nil", T)
 		} else {
-			code = specify(containsSliceTempl, name, e)
+			return genMethod(containsSliceTempl, "contains_slice", T)
 		}
 	case *types.Map:
-		name = randTypeName("contains_map")
-		code = specify(containsMapTempl, name, typ.Key(), typ.Elem())
+		return genMethod(containsMapTempl, "contains_map", typ.Key(), typ.Elem())
 	}
-	r = rewriteMethod(name)
 	return
 }
 
@@ -360,15 +344,11 @@ func (xs #name) dropWhile(pred func(#T) bool, reassign []#T) []#T {
 
 func dropWhileGen(fn *ast.SelectorExpr, args []ast.Expr, reassign ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
 	T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem()
-	if reassign != nil {
-		name = randTypeName("dropWhile_slice_reassign")
-		code = specify(dropWhileReassignTempl, name, T)
-		r = rewriteMethodReassign(name, reassign)
-	} else {
-		name = randTypeName("dropWhile_slice")
-		code = specify(dropWhileTempl, name, T)
-		r = rewriteMethod(name)
+	if reassign == nil {
+		return genMethod(dropWhileTempl, "dropWhile_slice", T)
 	}
+	name, code, _ = genMethod(dropWhileReassignTempl, "dropWhile_slice_reassign", T)
+	r = rewriteMethodReassign(name, reassign)
 	return
 }
 
@@ -403,15 +383,11 @@ func (m #name) elems(reassign []#U) []#U {
 
 func elemsGen(fn *ast.SelectorExpr, args []ast.Expr, reassign ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
 	mt := exprTypes[fn.X].Type.Underlying().(*types.Map)
-	if reassign != nil {
-		name = randTypeName("elems_map_reassign")
-		code = specify(elemsReassignTempl, name, mt.Key(), mt.Elem())
-		r = rewriteMethodReassign(name, reassign)
-	} else {
-		name = randTypeName("elems_map")
-		code = specify(elemsTempl, name, mt.Key(), mt.Elem())
-		r = rewriteMethod(name)
+	if reassign == nil {
+		return genMethod(elemsTempl, "elems_map", mt.Key(), mt.Elem())
 	}
+	name, code, _ = genMethod(elemsReassignTempl, "elems_map_reassign", mt.Key(), mt.Elem())
+	r = rewriteMethodReassign(name, reassign)
 	return
 }
 
@@ -463,19 +439,14 @@ func (m #name) filter(pred func(#T, #U) bool) map[#T]#U {
 func filterGen(fn *ast.SelectorExpr, args []ast.Expr, reassign ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
 	switch typ := exprTypes[fn.X].Type.Underlying().(type) {
 	case *types.Slice:
-		if reassign != nil {
-			name = randTypeName("filter_slice_reassign")
-			code = specify(filterReassignTempl, name, typ.Elem())
-			r = rewriteMethodReassign(name, reassign)
-		} else {
-			name = randTypeName("filter_slice")
-			code = specify(filterTempl, name, typ.Elem())
-			r = rewriteMethod(name)
+		if reassign == nil {
+			return genMethod(filterTempl, "filter_slice", typ.Elem())
 		}
+		name, code, _ = genMethod(filterReassignTempl, "filter_slice_reassign", typ.Elem())
+		r = rewriteMethodReassign(name, reassign)
+		return
 	case *types.Map:
-		name = randTypeName("filter_map")
-		code = specify(filterMapTempl, name, typ.Key(), typ.Elem())
-		r = rewriteMethod(name)
+		return genMethod(filterMapTempl, "filter_map", typ.Key(), typ.Elem())
 	}
 	return
 }
@@ -512,13 +483,10 @@ func foldGen(fn *ast.SelectorExpr, args []ast.Expr, _ ast.Expr, exprTypes map[as
 	T := sig.Params().At(1).Type()
 	U := sig.Params().At(0).Type()
 	if len(args) == 1 {
-		name = randTypeName("fold1_slice")
-		code = specify(fold1Templ, name, T, U)
+		return genMethod(fold1Templ, "fold1_slice", T, U)
 	} else if len(args) == 2 {
-		name = randTypeName("fold_slice")
-		code = specify(foldTempl, name, T, U)
+		return genMethod(foldTempl, "fold_slice", T, U)
 	}
-	r = rewriteMethod(name)
 	return
 }
 
@@ -553,15 +521,11 @@ func (m #name) keys(reassign []#T) []#T {
 
 func keysGen(fn *ast.SelectorExpr, args []ast.Expr, reassign ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
 	mt := exprTypes[fn.X].Type.Underlying().(*types.Map)
-	if reassign != nil {
-		name = randTypeName("keys_map_reassign")
-		code = specify(keysReassignTempl, name, mt.Key(), mt.Elem())
-		r = rewriteMethodReassign(name, reassign)
-	} else {
-		name = randTypeName("keys_map")
-		code = specify(keysTempl, name, mt.Key(), mt.Elem())
-		r = rewriteMethod(name)
+	if reassign == nil {
+		return genMethod(keysTempl, "keys_map", mt.Key(), mt.Elem())
 	}
+	name, code, _ = genMethod(keysReassignTempl, "keys_map_reassign", mt.Key(), mt.Elem())
+	r = rewriteMethodReassign(name, reassign)
 	return
 }
 
@@ -616,23 +580,18 @@ func morphGen(fn *ast.SelectorExpr, args []ast.Expr, reassign ast.Expr, exprType
 	case *types.Slice:
 		T := sig.Params().At(0).Type()
 		U := sig.Results().At(0).Type()
-		if reassign != nil {
-			name = randTypeName("morph_slice_reassign")
-			code = specify(morphReassignTempl, name, T, U)
-			r = rewriteMethodReassign(name, reassign)
-		} else {
-			name = randTypeName("morph_slice")
-			code = specify(morphTempl, name, T, U)
-			r = rewriteMethod(name)
+		if reassign == nil {
+			return genMethod(morphTempl, "morph_slice", T, U)
 		}
+		name, code, _ = genMethod(morphReassignTempl, "morph_slice_reassign", T, U)
+		r = rewriteMethodReassign(name, reassign)
+		return
 	case *types.Map:
 		T := sig.Params().At(0).Type()
 		U := sig.Params().At(1).Type()
 		V := sig.Results().At(0).Type()
 		W := sig.Results().At(1).Type()
-		name = randTypeName("morph_map")
-		code = specify(morphMapTempl, name, T, U, V, W)
-		r = rewriteMethod(name)
+		return genMethod(morphMapTempl, "morph_map", T, U, V, W)
 	}
 	return
 }
@@ -654,10 +613,7 @@ func reverseGen(fn *ast.SelectorExpr, args []ast.Expr, _ ast.Expr, exprTypes map
 	// that we're reversing. Since we don't have a way of knowing (slices
 	// don't support ==), we unfortunately cannot ever reuse existing memory.
 	T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem()
-	name = randTypeName("reverse_slice")
-	code = specify(reverseTempl, name, T)
-	r = rewriteMethod(name)
-	return
+	return genMethod(reverseTempl, "reverse_slice", T)
 }
 
 const takeWhileTempl = `
@@ -690,15 +646,11 @@ func (xs #name) takeWhile(pred func(#T) bool, reassign []#T) []#T {
 
 func takeWhileGen(fn *ast.SelectorExpr, args []ast.Expr, reassign ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
 	T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem()
-	if reassign != nil {
-		name = randTypeName("takeWhile_slice_reassign")
-		code = specify(takeWhileReassignTempl, name, T)
-		r = rewriteMethodReassign(name, reassign)
-	} else {
-		name = randTypeName("takeWhile_slice")
-		code = specify(takeWhileTempl, name, T)
-		r = rewriteMethod(name)
+	if reassign == nil {
+		return genMethod(takeWhileTempl, "takeWhile_slice", T)
 	}
+	name, code, _ = genMethod(takeWhileReassignTempl, "takeWhile_slice_reassign", T)
+	r = rewriteMethodReassign(name, reassign)
 	return
 }
 
@@ -716,8 +668,5 @@ func (xs #name) toSet() map[#T]struct{} {
 
 func toSetGen(fn *ast.SelectorExpr, args []ast.Expr, _ ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
 	T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem()
-	name = randTypeName("toSet_slice")
-	code = specify(toSetTempl, name, T)
-	r = rewriteMethod(name)
-	return
+	return genMethod(toSetTempl, "toSet_slice", T)
 }
