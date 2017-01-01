@@ -19,10 +19,9 @@ import (
 // generic ply function and rewrites the callsites to use their corresponding
 // specialized function.
 type specializer struct {
-	types    map[ast.Expr]types.TypeAndValue
-	fset     *token.FileSet
-	pkg      *ast.Package
-	reassign map[ast.Expr]ast.Expr
+	types map[ast.Expr]types.TypeAndValue
+	fset  *token.FileSet
+	pkg   *ast.Package
 }
 
 func (s specializer) hasMethod(recv ast.Expr, method string) bool {
@@ -52,13 +51,6 @@ func (s specializer) addDecl(filename, code string) {
 
 func (s specializer) Visit(node ast.Node) ast.Visitor {
 	switch n := node.(type) {
-	case *ast.AssignStmt:
-		// add every reassignment to a set. Later, we can check this set to
-		// determine whether we can apply a reassignment optimization.
-		if n.Tok == token.ASSIGN {
-			s.reassign[n.Rhs[0]] = n.Lhs[0]
-		}
-
 	case *ast.CallExpr:
 		switch fn := n.Fun.(type) {
 		case *ast.Ident:
@@ -77,7 +69,7 @@ func (s specializer) Visit(node ast.Node) ast.Visitor {
 					break
 				}
 
-				name, code, rewrite := gen(fn, n.Args, s.reassign[n], s.types)
+				name, code, rewrite := gen(fn, n.Args, s.types)
 				s.addDecl(name, code)
 				rewrite(n)
 			}
@@ -89,7 +81,7 @@ func (s specializer) Visit(node ast.Node) ast.Visitor {
 				break
 			}
 			if gen, ok := methodGenerators[fn.Sel.Name]; ok {
-				name, code, rewrite := gen(fn, n.Args, s.reassign[n], s.types)
+				name, code, rewrite := gen(fn, n.Args, s.types)
 				s.addDecl(name, code)
 				rewrite(n)
 			}
@@ -137,7 +129,6 @@ func main() {
 			Name:  pkg.Name(),
 			Files: make(map[string]*ast.File),
 		},
-		reassign: make(map[ast.Expr]ast.Expr),
 	}
 	for _, f := range plyFiles {
 		ast.Walk(spec, f)

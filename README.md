@@ -104,47 +104,6 @@ you should always read the docstring of each method in order to understand
 what optimizations may be applied. Depending on your use case, it may be
 necessary to write your own implementation to squeeze out maximum performance.
 
-**Reassignment:**
-
-When the result of a slice transformation is reassigned to an existing slice,
-we can often reuse that slice's memory. For example, a standard `filter` looks
-something like this:
-
-```go
-func (xs filterintslice) filter(pred func(int) bool) []int {
-	var filtered []int
-	for _, x := range xs {
-		if pred(x) {
-			filtered = append(filtered, x)
-		}
-	}
-	return filtered
-}
-```
-
-But if we reassign the result of `filter` to an existing slice (often the same
-slice being filtered), a different implementation is used:
-
-```go
-func (xs filterintslicereassign) filter(pred func(int) bool, reassign []int) []int {
-	filtered := reassign[:0]
-	for _, x := range xs {
-		if pred(x) {
-			filtered = append(filtered, x)
-		}
-	}
-	return filtered
-}
-```
-
-This comes with a caveat, though: `filtered` now holds a reference to the
-underlying memory of `reassign`, so that memory can't be garbage collected. If
-`reassign` is very large and `filtered` winds up being small, it may have been
-more appropriate to allocate a smaller slice. Even worse, if the elements of
-`reassign` hold pointers to more memory, none of that memory can be collected
-either. This caveat applies to other methods as well, so read the docstrings
-carefully.
-
 **Pipelining (planned):**
 
 Pipelining means chaining together multiple such calls. For example:

@@ -71,27 +71,11 @@ func (s SliceT) Contains(e T) bool
 // DropWhile returns a new slice omitting the initial elements of s that
 // satisfy pred. That is, unlike Filter, the slice returned by DropWhile is
 // guaranteed to be a contiguous subset of s beginning at the first element
-// that does not satisfy pred. If the result is reassigned to an existing
-// slice of the same type, DropWhile will reuse that slice's memory. As with
-// Filter, be careful when reassigning to large slices.
+// that does not satisfy pred.
 func (s SliceT) DropWhile(pred func(T) bool) SliceT
 
 // Filter returns a new slice containing only the elements of s that satisfy
-// pred. If the result is reassigned to an existing slice of the same type,
-// Filter will reuse that slice's memory. The common case is reassigning to s,
-// in which case Filter will not allocate any memory.
-//
-// Note that if the result is reassigned, the "excess element memory" cannot
-// be garbage collected. For example:
-//
-//    xs := make([]int, 1000)
-//    xs = []int{1, 2, 3}.filter(func(int) bool { return true })
-//
-// In the above code, xs will contain 1, 2, and 3, and will be resliced to
-// have a length of 3. But since xs still holds a reference to 1000 ints, that
-// memory cannot be garbage collected until xs goes out of scope. In short: be
-// careful when reassigning to large slices. To avoid this optimization,
-// assign the result to a new variable.
+// pred.
 func (s SliceT) Filter(pred func(T) bool) SliceT
 
 // Fold returns the result of repeatedly applying fn to an initial
@@ -112,22 +96,15 @@ func (s SliceT) Filter(pred func(T) bool) SliceT
 func (s SliceT) Fold(fn func(U, T) U, acc U) U
 
 // Morph returns a new slice containing the result of applying fn to each
-// element of s. If the result is reassigned to an existing slice whose
-// capacity is at least len(s), Morph will reuse that slice's memory. As with
-// Filter, be careful when reassigning to large slices.
+// element of s.
 func (s SliceT) Morph(fn func(T) U) SliceU
 
 // Reverse returns a new slice containing the elements of s in reverse order.
-// Reverse never reverses the elements in-place, as it is currently too
-// difficult to detect when this optimization can be safely applied.
 func (s SliceT) Reverse() SliceT
 
 // TakeWhile returns a new slice containing the initial elements of s that
 // satisfy pred. That is, unlike Filter, the slice returned by TakeWhile is
 // guaranteed to be a contiguous subset of s beginning at the first element.
-// If the result is reassigned to an existing slice of the same type,
-// TakeWhile will reuse that slice's memory. As with Filter, be careful when
-// reassigning to large slices.
 func (s SliceT) TakeWhile(pred func(T) bool) SliceT
 
 // ToSet returns a map containing the elements of s as keys, each mapped to
@@ -176,8 +153,4 @@ func Not(fn T) T
 //        fn(xs[1], ys[1]),
 //        fn(xs[2], ys[2]),
 //    }
-//
-// If the result is reassigned to an existing slice of type []V whose capacity
-// is large enough to hold the resulting elements, Zip will reuse that slice's
-// memory.
 func Zip(fn func(T, U) V, xs []T, ys []U) []V
