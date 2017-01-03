@@ -4,7 +4,6 @@ import (
 	"go/ast"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/lukechampine/ply/types"
 )
@@ -70,15 +69,21 @@ var methodGenerators = map[string]func(*ast.SelectorExpr, []ast.Expr, map[ast.Ex
 	"toSet":     toSetGen,
 }
 
-var rand = uint32(time.Now().UnixNano())
+var safeFnName = func() func(string) string {
+	count := 0
+	return func(name string) string {
+		count++
+		return "__plyfn_" + strconv.Itoa(count) + "_" + name
+	}
+}()
 
-func nextSuffix() string {
-	rand = rand*1664525 + 1013904223 // constants from ioutil.nextSuffix
-	return strconv.Itoa(int(1e9 + rand%1e9))[1:]
-}
-
-func randFnName(name string) string   { return "__plyfn_" + name + "_" + nextSuffix() }
-func randTypeName(name string) string { return "__plytype_" + name + "_" + nextSuffix() }
+var safeTypeName = func() func(string) string {
+	count := 0
+	return func(name string) string {
+		count++
+		return "__plytype_" + strconv.Itoa(count) + "_" + name
+	}
+}()
 
 func specify(templ, name string, typs ...types.Type) string {
 	code := strings.Replace(templ, "#name", name, -1)
@@ -90,14 +95,14 @@ func specify(templ, name string, typs ...types.Type) string {
 }
 
 func genFunc(templ, fnname string, typs ...types.Type) (name, code string, r rewriter) {
-	name = randFnName(fnname)
+	name = safeFnName(fnname)
 	code = specify(templ, name, typs...)
 	r = rewriteFunc(name)
 	return
 }
 
 func genMethod(templ, methodname string, typs ...types.Type) (name, code string, r rewriter) {
-	name = randFnName(methodname)
+	name = safeTypeName(methodname)
 	code = specify(templ, name, typs...)
 	r = rewriteMethod(name)
 	return
