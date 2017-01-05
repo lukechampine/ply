@@ -182,6 +182,15 @@ func main() {
 	println(xs.filter(gt3).morph(even).fold(all))
 }`, `true`},
 
+		"reverse chain": {`
+package main
+func main() {
+	gt3 := func(x int) bool { return x > 3 }
+	xs := []int{1, 2, 3, 4, 6, 20}
+	xs = xs.filter(gt3).reverse()
+	println(xs[0], xs[1], xs[2])
+}`, `20 6 4`},
+
 		"reverse": {`
 package main
 func main() {
@@ -313,6 +322,21 @@ func main() {
 	xs := []int{1, 2, 3}.filter(not(even))
 	println(len(xs), xs[0], xs[1])
 }`, `2 1 3`},
+
+		"pipeline": {`
+package main
+func main() {
+	xs := []int{1, 2, 3, 4, 5}
+	tee := func(i int) int {
+		print(i, " ")
+		return i
+	}
+	lt3 := func(i int) bool { return i < 3 }
+
+	// pipeline should cause only 1 2 3 to be printed
+	a := xs.morph(tee).all(lt3)
+	println(a)
+}`, `1 2 3 false`},
 	}
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {

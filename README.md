@@ -39,26 +39,20 @@ A similar approach is used to implement generic methods:
 xs := []int{1, 2, 3, 4, 6, 20}
 b := xs.filter(func(x int) bool { return x > 3 }).
         morph(func(x int) bool { return x % 2 == 0 }).
-        fold(func(x, y bool) bool { return x && y })
+        fold(func(x, y bool) bool { return x && y }, true)
 ```
 
 In the above, `b` is true because all the integers in `xs` greater than 3 are
-even. The specific implementation of `morph` looks like:
+even. To compile this, `xs` is wrapped in a new type that has a `filter`
+method. Then, that call is wrapped in a new type that has a `morph` method,
+and so on.
 
-```go
-type morphintboolslice []int
-
-func (xs morphintboolslice) morph(fn func(int) bool) []bool {
-	morphed := make([]bool, len(xs))
-	for i := range xs {
-		morphed[i] = fn(xs[i])
-	}
-	return morphed
-}
-```
-
-And to use it, we simply type-cast `xs` to a `morphintboolslice` at the
-callsite.
+Note that in most cases, Ply can combine these method chains into a single
+"pipeline" that **does not allocate any intermediate slices**. Without
+pipelining, `filter` would allocate a slice and pass it to `morph`, which
+would allocate another slice and pass it to `fold`. But Ply is able to merge
+these methods into a single transformation that does not require allocations,
+the same way a (good) human programmer would write it.
 
 Usage
 -----
@@ -97,14 +91,15 @@ All functions and methods are documented in the [`ply` pseudo-package](https://g
 Supported Optimizations
 -----------------------
 
-In many cases we can reduce allocations when using Ply methods. The Ply
-compiler will automatically apply these optimizations when it is safe to do
-so. However, many optimizations have trade-offs. If performance is important,
-you should always read the docstring of each method in order to understand
-what optimizations may be applied. Depending on your use case, it may be
-necessary to write your own implementation to squeeze out maximum performance.
+In many cases we can reduce allocations when using Ply functions and methods.
+The Ply compiler will automatically apply these optimizations when it is safe
+to do so. However, all optimizations have trade-offs. If performance is
+important, you should always read the docstring of each method in order to
+understand what optimizations may be applied. Depending on your use case, it
+may be necessary to write your own implementation to squeeze out maximum
+performance.
 
-**Pipelining (planned):**
+**Pipelining:**
 
 Pipelining means chaining together multiple such calls. For example:
 
@@ -115,9 +110,9 @@ b := xs.filter(func(x int) bool { return x > 3 }).
         fold(func(acc, x bool) bool { return acc && x })
 ```
 
-Currently, this sequence requires allocating a new slice for the `filter` and
-a new slice for the `morph`. But if we were writing this transformation by
-hand, we could optimize it like so:
+As written, this chain requires allocating a new slice for the `filter` and a
+new slice for the `morph`. But if we were writing this transformation by hand,
+we could optimize it like so:
 
 ```go
 b := true
@@ -128,21 +123,75 @@ for _, x := range xs {
 }
 ```
 
-This version requires no allocations at all! I would very much like to
-implement this sort of optimization, but I imagine it will be challenging.
+(A good rule of thumb is that, for most chains, only the allocations in the
+final method are required. `fold` doesn't require any allocations, but if the
+chain stopped at `morph`, then of course we would still need to allocate
+memory in order to return the morphed slice.)
+
+Ply is able to perform the above optimization automatically. The bodies of
+`filter`, `morph`, and `fold` are combined into a single method, `pipe`, and
+the callsite is rewritten to supply the arguments of each chained function:
+
+```go
+xs := []int{1, 2, 3, 4, 6, 20}
+b := filtermorphfold(xs).pipe(
+		func(x int) bool { return x > 3 },
+		func(x int) bool { return x % 2 == 0 },
+		func(x, y bool) bool { return x && y }, true)
+```
+
+However, not all methods can be pipelined. `reverse` is a good example. If
+`reverse` is the first method in the chain, then we can eliminate an
+allocation by reversing the order in which we iterate through the slice. We
+can also eliminate an allocation if `reverse` is the last method in the chain.
+But what do we do if `reverse` is in the middle? Consider this chain:
+
+```go
+xs.takeWhile(even).reverse().morph(square)
+```
+
+Since we don't know what `takeWhile` will return, there is no way to pass its
+reversed elements to `morph` without allocating an intermediate slice. So we
+resort to a less-efficient form, splitting the chain into `takeWhile(even)`
+and `reverse().morph(square)`, each of which will perform an allocation.
+
+Fortunately, it is usually possible to reorder the chain such that `reverse`
+is the first or last method. In the above, we know that `morph` doesn't affect
+the length of the slice, so we can move `reverse` to the end and the result
+will be the same. Ply can't perform this reordering automatically though:
+methods may have side effects that the programmer is relying upon.
+
+Another limitation to be aware of is that pipelining cannot eliminate any
+allocations performed inside function arguments. For example, in this chain:
+
+```go
+xrange := func(n int) []int {
+	r := make([]int, n)
+	for i := range r {
+		r[i] = i
+	}
+	return r
+}
+sum := func(x, y int) int { return x + y }
+total := xs.morph(xrange).fold(sum)
+```
+
+A handwritten version of this chain could eliminate the allocations performed
+by `xrange`, but there is no way to do so programmatically.
+
 
 **Parallelization (planned):**
 
 Functor operations like `morph` can be trivially parallelized, but this
 optimization should not be applied automatically. For small lists, the
-overhead is probably not worth it. More importantly, if the function has side-
+overhead is probably not worth it. More importantly, if the function has side
 effects, parallelizing may cause a race condition. So this optimization must
 be specifically requested by the caller via separate identifiers, e.g.
 `pmorph`, `pfilter`, etc.
 
 **Compile-time evaluation:**
 
-A few functions (currently just `max` and `min`) can be evaluated at compile-
+A few functions (currently just `max` and `min`) can be evaluated at compile
 time if their arguments are also known at compile time. This is similar to how
 the builtin `len` and `cap` functions work:
 
@@ -152,8 +201,8 @@ len([3]int) // known at compile-time; compiles to 3
 max(1, min(2, 3)) // known at compile time; compiles to 2
 ```
 
-It is also possible to perform compile-time evaluation on certain literals.
-For example:
+In theory, it is also possible to perform compile-time evaluation on certain
+literals. For example:
 
 ```go
 []int{1, 2, 3}.contains(3) // compile to true?
@@ -206,6 +255,7 @@ The motivation for this optimization is that the Go compiler is more likely to
 inline top-level functions (AFAIK). Eliminating the overhead of a function
 call could be significant when, say, filtering a large slice.
 
+
 FAQ
 ---
 
@@ -215,7 +265,7 @@ There are basically two options: runtime generics (via reflection) and
 compile-time generics (via codegen). They both suck for different reasons:
 reflection is slow, and codegen is cumbersome. Ply is an attempt at making
 codegen suck a bit less. You don't need to grapple with magic annotations or
-`go generate`; you can just start using `filter` and `fold` as though Go had
+custom types; you can just start using `filter` and `fold` as though Go had
 always supported them.
 
 **What are the downsides of this approach?**

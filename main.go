@@ -24,9 +24,9 @@ type specializer struct {
 	pkg   *ast.Package
 }
 
-func (s specializer) hasMethod(recv ast.Expr, method string) bool {
+func hasMethod(recv ast.Expr, method string, exprTypes map[ast.Expr]types.TypeAndValue) bool {
 	// TODO: use set.Lookup instead of searching manually
-	set := types.NewMethodSet(s.types[recv].Type)
+	set := types.NewMethodSet(exprTypes[recv].Type)
 	for i := 0; i < set.Len(); i++ {
 		if set.At(i).Obj().(*types.Func).Name() == method {
 			return true
@@ -75,12 +75,23 @@ func (s specializer) Visit(node ast.Node) ast.Visitor {
 			}
 
 		case *ast.SelectorExpr:
-			if s.hasMethod(fn.X, fn.Sel.Name) {
-				// don't generate anything if the method is explicitly
-				// defined. This allows types to override ply methods.
-				break
+			// Detect and construct a pipeline if possible. Otherwise,
+			// generate a single method.
+			var chain []*ast.CallExpr
+			cur := n
+			for {
+				chain = append(chain, cur)
+				if sel, ok := cur.Fun.(*ast.SelectorExpr); !ok {
+					break
+				} else if cur, ok = sel.X.(*ast.CallExpr); !ok {
+					break
+				}
 			}
-			if gen, ok := methodGenerators[fn.Sel.Name]; ok {
+			if p := buildPipeline(chain, s.types); p != nil {
+				name, code, rewrite := p.gen()
+				s.addDecl(name, code)
+				rewrite(n)
+			} else if gen, ok := methodGenerators[fn.Sel.Name]; ok && !hasMethod(fn.X, fn.Sel.Name, s.types) {
 				name, code, rewrite := gen(fn, n.Args, s.types)
 				s.addDecl(name, code)
 				rewrite(n)
