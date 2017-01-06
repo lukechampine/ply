@@ -79,13 +79,11 @@ func (s specializer) Visit(node ast.Node) ast.Visitor {
 			// generate a single method.
 			var chain []*ast.CallExpr
 			cur := n
-			for {
-				chain = append(chain, cur)
-				if sel, ok := cur.Fun.(*ast.SelectorExpr); !ok {
-					break
-				} else if cur, ok = sel.X.(*ast.CallExpr); !ok {
+			for ok := true; ok; cur, ok = cur.Fun.(*ast.SelectorExpr).X.(*ast.CallExpr) {
+				if _, ok := cur.Fun.(*ast.SelectorExpr); !ok {
 					break
 				}
+				chain = append(chain, cur)
 			}
 			if p := buildPipeline(chain, s.types); p != nil {
 				name, code, rewrite := p.gen()
