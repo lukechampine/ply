@@ -154,6 +154,8 @@ func (t *transformation) specify(call *ast.CallExpr, nargs int, exprTypes map[as
 		for i := range call.Args {
 			*templ = strings.Replace(*templ, "#arg"+strconv.Itoa(i+1), "__plyarg_"+strconv.Itoa(i+nargs), -1)
 		}
+		// trim whitespace
+		*templ = strings.TrimSpace(*templ)
 	}
 }
 
