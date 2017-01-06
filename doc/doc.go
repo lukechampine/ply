@@ -95,6 +95,9 @@ func (s SliceT) Filter(pred func(T) bool) SliceT
 // yield 1 - (2 - (3 - 4)) == -2.
 func (s SliceT) Fold(fn func(U, T) U, acc U) U
 
+// Foreach calls fn on each element of s.
+func (s SliceT) Foreach(fn func(T))
+
 // Morph returns a new slice containing the result of applying fn to each
 // element of s.
 func (s SliceT) Morph(fn func(T) U) SliceU
@@ -106,6 +109,9 @@ func (s SliceT) Reverse() SliceT
 // satisfy pred. That is, unlike Filter, the slice returned by TakeWhile is
 // guaranteed to be a contiguous subset of s beginning at the first element.
 func (s SliceT) TakeWhile(pred func(T) bool) SliceT
+
+// Tee calls fn on each element of s and returns s unmodified.
+func (s SliceT) Tee(fn func(T)) []T
 
 // ToSet returns a map containing the elements of s as keys, each mapped to
 // the empty struct.

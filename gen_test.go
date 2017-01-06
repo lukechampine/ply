@@ -307,6 +307,23 @@ func main() {
 	println(ks[0], es[0])
 }`, `1 foo`},
 
+		"simple foreach": {`
+package main
+func main() {
+	say := func(b bool) { print(b, " ") }
+	even := func(i int) bool { return i % 2 == 0 }
+	[]int{1, 2, 3}.morph(even).foreach(say)
+}`, `false true false`},
+
+		"simple tee": {`
+package main
+func main() {
+	say := func(i int) { print(i, " ") }
+	even := func(i int) bool { return i % 2 == 0 }
+	xs := []int{1, 2, 3}.tee(say).morph(even)
+	println(xs[0], xs[1], xs[2])
+}`, `1 2 3 false true false`},
+
 		"simple toSet": {`
 package main
 func main() {

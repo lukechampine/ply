@@ -522,6 +522,25 @@ var transformations = map[string]transformation{
 		typeFn: justSliceElem,
 	},
 
+	"foreach": transformation{
+		recv:   `[]#T`,
+		params: []string{`func(#T)`},
+		ret:    ``,
+
+		outline: `
+	#next
+`,
+		loop: `
+	for _, x1 := range xs {
+		#next
+	}
+`,
+		cons: `
+		#arg1(#x)
+`,
+		typeFn: justSliceElem,
+	},
+
 	"morph": transformation{
 		recv:   `[]#T`,
 		params: []string{`func(#T) #U`},
@@ -600,6 +619,27 @@ var transformations = map[string]transformation{
 `,
 		cons: `
 		taken = append(taken, #x)
+`,
+		typeFn: justSliceElem,
+	},
+
+	"tee": transformation{
+		recv:   `[]#T`,
+		params: []string{`func(#T)`},
+		ret:    `[]#T`,
+
+		outline: `
+	#next
+	return xs
+`,
+		loop: `
+	for _, x1 := range xs {
+		#next
+	}
+`,
+		op: `
+		#arg1(#x)
+		#next
 `,
 		typeFn: justSliceElem,
 	},

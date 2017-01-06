@@ -81,7 +81,7 @@ Supported Functions and Methods
 - Planned: `sort`, `repeat`, `compose`
 
 **Methods:** `all`, `any`, `contains`, `dropWhile`, `elems`, `filter`,
-`fold`, `keys`, `morph`, `reverse`, `takeWhile`, `toSet`
+`fold`, `foreach`, `keys`, `morph`, `reverse`, `takeWhile`, `tee`, `toSet`
 
 - Planned: `join`, `replace`, `split`, `uniq`
 
@@ -161,7 +161,14 @@ the length of the slice, so we can move `reverse` to the end and the result
 will be the same. Ply can't perform this reordering automatically though:
 methods may have side effects that the programmer is relying upon.
 
-Another limitation to be aware of is that pipelining cannot eliminate any
+Side effects are also problematic because pipelining can change the number of
+times a function is called. For example, if the `morph` in the above example
+had a side effect, it would only occur three times instead of six. So the best
+practice is to avoid side effects in functions passed to `morph`, `filter`,
+etc. Instead, perform side effects in `foreach` and `tee`, which are designed
+with side effects in mind.
+
+Lastly, it's worth pointing out that pipelining cannot eliminate any
 allocations performed inside function arguments. For example, in this chain:
 
 ```go

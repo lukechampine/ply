@@ -62,10 +62,12 @@ var methodGenerators = map[string]func(*ast.SelectorExpr, []ast.Expr, map[ast.Ex
 	"elems":     elemsGen,
 	"filter":    filterGen,
 	"fold":      foldGen,
+	"foreach":   foreachGen,
 	"keys":      keysGen,
 	"morph":     morphGen,
 	"reverse":   reverseGen,
 	"takeWhile": takeWhileGen,
+	"tee":       teeGen,
 	"toSet":     toSetGen,
 }
 
@@ -476,6 +478,21 @@ func foldGen(fn *ast.SelectorExpr, args []ast.Expr, exprTypes map[ast.Expr]types
 	return
 }
 
+const foreachTempl = `
+type #name []#T
+
+func (xs #name) foreach(fn func(#T)) {
+	for _, x := range xs {
+		fn(x)
+	}
+}
+`
+
+func foreachGen(fn *ast.SelectorExpr, args []ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
+	T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem()
+	return genMethod(foreachTempl, "foreach_slice", T)
+}
+
 const keysTempl = `
 type #name map[#T]#U
 
@@ -623,6 +640,22 @@ func (xs #name) takeWhile(pred func(#T) bool, reassign []#T) []#T {
 func takeWhileGen(fn *ast.SelectorExpr, args []ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
 	T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem()
 	return genMethod(takeWhileTempl, "takeWhile_slice", T)
+}
+
+const teeTempl = `
+type #name []#T
+
+func (xs #name) tee(fn func(#T)) []#T {
+	for _, x := range xs {
+		fn(x)
+	}
+	return xs
+}
+`
+
+func teeGen(fn *ast.SelectorExpr, args []ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
+	T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem()
+	return genMethod(teeTempl, "tee_slice", T)
 }
 
 const toSetTempl = `
