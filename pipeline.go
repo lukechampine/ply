@@ -528,7 +528,7 @@ var transformations = map[string]transformation{
 		ret:    `[]#U`,
 
 		outline: `
-	var morphed []#T
+	var morphed []#U
 	#next
 	return morphed
 `,
