@@ -1,0 +1,272 @@
+package codegen
+
+import (
+	"reflect"
+	"strconv"
+	"testing"
+)
+
+type ints []int
+
+func (ints) filter(func(x int) bool) ints { return ints{7} }
+
+func TestMerge(t *testing.T) {
+	m := merge(map[int]int{1: 1}, map[int]int{2: 2})
+	if !reflect.DeepEqual(m, map[int]int{1: 1, 2: 2}) {
+		t.Error("merged failed:", m)
+	}
+
+	m = merge(nil, map[int]int{1: 1}, nil, map[int]int{2: 2})
+	if !reflect.DeepEqual(m, map[int]int{1: 1, 2: 2}) {
+		t.Error("merged failed:", m)
+	}
+
+	m = merge(merge(nil, map[int]int{1: 1}), merge(nil, map[int]int{2: 2}))
+	if !reflect.DeepEqual(m, map[int]int{1: 1, 2: 2}) {
+		t.Error("merged failed:", m)
+	}
+}
+
+func TestFilter(t *testing.T) {
+	xs := []int{1, 2, 3}.filter(func(i int) bool { return i > 1 })
+	if !reflect.DeepEqual(xs, []int{2, 3}) {
+		t.Error("filter failed:", xs)
+	}
+
+	m := map[uint8]int8{1: 1, 3: -3, 4: 4, 8: -1, 9: -9}
+	m = m.filter(func(u uint8, i int8) bool { return u%2 == 0 && i < 0 })
+	if !reflect.DeepEqual(m, map[uint8]int8{8: -1}) {
+		t.Error("filter failed:", m)
+	}
+}
+
+func TestMorph(t *testing.T) {
+	xs := []int{1, 2, 3}.morph(func(i int) bool { return i%2 == 0 })
+	if !reflect.DeepEqual(xs, []bool{false, true, false}) {
+		t.Error("morph failed:", xs)
+	}
+
+	m := map[uint8]int8{1: 1, 2: 2, 3: 3}
+	minusy := func(u uint8, i int8) (int8, string) {
+		return -int8(u), "y" + strconv.Itoa(int(i))
+	}
+	ys := m.morph(minusy)
+	if !reflect.DeepEqual(ys, map[int8]string{-1: "y1", -2: "y2", -3: "y3"}) {
+		t.Error("morph failed:", xs)
+	}
+}
+
+func TestFold(t *testing.T) {
+	product := func(x, y int) int { return x * y }
+	p := []int{1, 2, 3}.fold(product, 1)
+	if p != 6 {
+		t.Error("fold failed:", p)
+	}
+
+	p = []int{1, 2, 3}.fold(product)
+	if p != 6 {
+		t.Error("fold1 failed:", p)
+	}
+}
+
+func TestWeirdTypes(t *testing.T) {
+	p := ints{1, 2, 3}.fold(func(x, y int) int { return x * y })
+	if p != 6 {
+		t.Error("fold1 failed:", p)
+	}
+
+	xs := ints{1, 2, 3}.filter(func(i int) bool { return i > 1 })
+	if !reflect.DeepEqual(xs, ints{7}) {
+		t.Error("filter was not overwritten:", xs)
+	}
+
+	type abs []struct{ a, b int }
+	as := abs{{a: 3, b: 4}}.morph(func(c struct{ a, b int }) int { return c.a + c.b })
+	if !reflect.DeepEqual(as, []int{7}) {
+		t.Error("morph failed:", xs)
+	}
+
+	type foo struct{ a []int }
+	type bar struct{ f foo }
+	bs := bar{foo{[]int{1, 2, 3}}}.f.a.filter(func(i int) bool { return i > 1 })
+	if !reflect.DeepEqual(bs, []int{2, 3}) {
+		t.Error("filter failed:", xs)
+	}
+
+	n := [][3]int{{}, {}}.fold(func(acc int, a [3]int) int { return acc + len(a) }, 0)
+	if n != 6 {
+		t.Error("fold failed", n)
+	}
+
+	ps := []*int{nil, nil}
+	allNil := ps.all(func(i *int) bool { return i == nil })
+	if !allNil {
+		t.Error("all failed")
+	}
+}
+
+func TestReverse(t *testing.T) {
+	xs := []int{1, 2, 3}.reverse()
+	if !reflect.DeepEqual(xs, []int{3, 2, 1}) {
+		t.Error("reverse failed:", xs)
+	}
+
+	xs = []int{1, 2, 3}.reverse().reverse()
+	if !reflect.DeepEqual(xs, []int{1, 2, 3}) {
+		t.Error("reverse failed:", xs)
+	}
+}
+
+func TestTakeWhile(t *testing.T) {
+	xs := []int{2, 4, 5, 6}.takeWhile(func(i int) bool { return i%2 == 0 })
+	if !reflect.DeepEqual(xs, []int{2, 4}) {
+		t.Error("takeWhile failed:", xs)
+	}
+}
+
+func TestDropWhile(t *testing.T) {
+	xs := []int{1, 2, 3, 4, 5}.dropWhile(func(i int) bool { return i < 3 })
+	if !reflect.DeepEqual(xs, []int{3, 4, 5}) {
+		t.Error("dropWhile failed:", xs)
+	}
+}
+
+func TestZip(t *testing.T) {
+	xs := []int32{0, 2, 4, 6, 100}
+	ys := []int64{1, 3, 5, 7}
+	add := func(x int32, y int64) int { return int(x) + int(y) }
+	zs := zip(add, xs, ys)
+	if !reflect.DeepEqual(zs, []int{1, 5, 9, 13}) {
+		t.Error("zip failed:", zs)
+	}
+}
+
+func TestAnyAll(t *testing.T) {
+	even := func(x int) bool { return x%2 == 0 }
+	odd := func(x int) bool { return x%2 == 1 }
+	xs := []int{1, 3, 4, 7, 9}
+	b := xs.any(even)
+	if !b {
+		t.Error("any failed:", b)
+	}
+	b = xs.all(odd)
+	if b {
+		t.Error("any failed:", b)
+	}
+}
+
+func TestContains(t *testing.T) {
+	xs := []int{1, 3, 4, 7, 9}
+	b := xs.contains(7)
+	if !b {
+		t.Error("contains failed:", b)
+	}
+
+	m := map[int]uint{1: 1, 3: 9, 4: 16, 7: 49, 9: 81}
+	b = m.contains(7)
+	if !b {
+		t.Error("contains failed:", b)
+	}
+
+	bs := [][]byte{[]byte("foo"), nil}
+	b = bs.contains(nil)
+	if !b {
+		t.Error("contains failed:", b)
+	}
+}
+
+func TestMaxMin(t *testing.T) {
+	const c = max(1, 1<<min(4, 100))
+	if c != 16 {
+		t.Error("max failed:", c)
+	}
+	i := -0.1
+	var v = min(c, i)
+	if v != -0.1 {
+		t.Error("min failed:", v)
+	}
+	const s = max("foo", "bar")
+	if s != "foo" {
+		t.Error("max failed:", s)
+	}
+}
+
+func TestKeysElems(t *testing.T) {
+	m := map[int]string{1: "foo"}
+	ks, es := m.keys(), m.elems()
+	if !reflect.DeepEqual(ks, []int{1}) {
+		t.Error("keys failed:", ks)
+	}
+	if !reflect.DeepEqual(es, []string{"foo"}) {
+		t.Error("elems failed:", es)
+	}
+}
+
+func TestForeach(t *testing.T) {
+	sideEffect := ""
+	[]int{1, 2, 3}.foreach(func(i int) { sideEffect += strconv.Itoa(i) })
+	if sideEffect != "123" {
+		t.Error("foreach failed:", sideEffect)
+	}
+}
+
+func TestTee(t *testing.T) {
+	sideEffect := ""
+	side := func(i int) { sideEffect += strconv.Itoa(i) }
+	even := func(i int) bool { return i%2 == 0 }
+	xs := []int{1, 2, 3}.tee(side).morph(even)
+	if !reflect.DeepEqual(xs, []bool{false, true, false}) {
+		t.Error("morph failed:", xs)
+	}
+	if sideEffect != "123" {
+		t.Error("tee failed:")
+	}
+}
+
+func TestToSet(t *testing.T) {
+	xs := []int{1, 2, 1, 2, 1, 2, 1, 2, 1, 2, 1}
+	m := xs.toSet()
+	exp := map[int]struct{}{
+		1: struct{}{},
+		2: struct{}{},
+	}
+	if !reflect.DeepEqual(m, exp) {
+		t.Error("toSet failed:", m)
+	}
+}
+
+func TestNot(t *testing.T) {
+	even := func(i int) bool { return i%2 == 0 }
+	xs := []int{1, 2, 3}.filter(not(even))
+	if !reflect.DeepEqual(xs, []int{1, 3}) {
+		t.Error("not failed:", xs)
+	}
+}
+
+func TestPipeline(t *testing.T) {
+	gt3 := func(x int) bool { return x > 3 }
+	even := func(x int) bool { return x%2 == 0 }
+	all := func(acc, x bool) bool { return acc && x }
+	b := []int{1, 2, 3, 4, 6, 20}.filter(gt3).morph(even).fold(all)
+	if !b {
+		t.Error("pipeline failed:", b)
+	}
+
+	xs := []int{1, 2, 3, 4, 6, 20}.filter(gt3).reverse()
+	if !reflect.DeepEqual(xs, []int{20, 6, 4}) {
+		t.Error("pipeline failed:", xs)
+	}
+
+	sideEffects := 0
+	xs = []int{1, 2, 3, 4, 5}
+	side := func(int) { sideEffects++ }
+	lt3 := func(i int) bool { return i < 3 }
+	// pipeline should cause side to only be called 3 times
+	a := xs.tee(side).all(lt3)
+	if a {
+		t.Error("all failed:", a)
+	}
+	if sideEffects != 3 {
+		t.Error("pipeline failed:")
+	}
+}
