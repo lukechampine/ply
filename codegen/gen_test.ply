@@ -267,6 +267,6 @@ func TestPipeline(t *testing.T) {
 		t.Error("all failed:", a)
 	}
 	if sideEffects != 3 {
-		t.Error("pipeline failed:")
+		t.Error("pipeline failed:", sideEffects)
 	}
 }

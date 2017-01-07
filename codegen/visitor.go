@@ -114,7 +114,7 @@ func Compile(filenames []string) (map[string][]byte, error) {
 		}
 		files = append(files, f)
 		if filepath.Ext(arg) == ".ply" {
-			plyFiles[filepath.Base(arg)] = f
+			plyFiles[arg] = f
 		}
 	}
 	if len(plyFiles) == 0 {
@@ -152,10 +152,11 @@ func Compile(filenames []string) (map[string][]byte, error) {
 
 	// write all files to set
 	set := make(map[string][]byte)
+	pcfg := &printer.Config{Tabwidth: 8, Mode: printer.SourcePos}
 	for name, f := range plyFiles {
 		var buf bytes.Buffer
-		printer.Fprint(&buf, fset, f)
-		name = "ply-" + strings.Replace(name, ".ply", ".go", -1)
+		pcfg.Fprint(&buf, fset, f)
+		name = "ply-" + strings.Replace(filepath.Base(name), ".ply", ".go", -1)
 		set[name] = buf.Bytes()
 	}
 
