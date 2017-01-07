@@ -1,4 +1,4 @@
-package main
+package codegen
 
 import (
 	"go/ast"
@@ -381,7 +381,6 @@ func (m #name) elems(reassign []#U) []#U {
 func elemsGen(fn *ast.SelectorExpr, args []ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
 	mt := exprTypes[fn.X].Type.Underlying().(*types.Map)
 	return genMethod(elemsTempl, "elems_map", mt.Key(), mt.Elem())
-	return
 }
 
 const filterTempl = `

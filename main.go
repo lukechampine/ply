@@ -2,171 +2,146 @@ package main
 
 import (
 	"flag"
-	"go/ast"
-	"go/parser"
-	"go/printer"
-	"go/token"
+	"fmt"
+	"go/build"
+	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
-	"github.com/lukechampine/ply/importer"
-	"github.com/lukechampine/ply/types"
+	"github.com/lukechampine/ply/codegen"
 )
 
-// A specializer is an ast.Visitor that generates specialized versions of each
-// generic ply function and rewrites the callsites to use their corresponding
-// specialized function.
-type specializer struct {
-	types map[ast.Expr]types.TypeAndValue
-	fset  *token.FileSet
-	pkg   *ast.Package
+var (
+	// to be supplied at build time
+	version   = "?"
+	githash   = "?"
+	builddate = "?"
+)
+
+func isFileList(args []string) bool {
+	return len(args) > 0 && (strings.HasSuffix(args[0], ".go") || strings.HasSuffix(args[0], ".ply"))
 }
 
-func hasMethod(recv ast.Expr, method string, exprTypes map[ast.Expr]types.TypeAndValue) bool {
-	// TODO: use set.Lookup instead of searching manually
-	set := types.NewMethodSet(exprTypes[recv].Type)
-	for i := 0; i < set.Len(); i++ {
-		if set.At(i).Obj().(*types.Func).Name() == method {
-			return true
+// adhoc parses args as a set of files comprising an ad-hoc package. All files
+// must be in the same directory.
+func adhoc(args []string) (dir string, files []string, _ error) {
+	dir = filepath.Dir(args[0])
+	for _, arg := range args {
+		if !(strings.HasSuffix(arg, ".go") || strings.HasSuffix(arg, ".ply")) {
+			return "", nil, fmt.Errorf("named files must be .go or .ply files: %s", arg)
+		} else if filepath.Dir(arg) != dir {
+			return "", nil, fmt.Errorf("named files must all be in one directory; have %s and %s", dir, filepath.Dir(arg))
 		}
+		files = append(files, arg)
 	}
-	return false
+	return dir, files, nil
 }
 
-func (s specializer) addDecl(filename, code string) {
-	if _, ok := s.pkg.Files[filename]; ok {
-		// check for existence first, because parsing is expensive
-		return
+// packages parses args as a set of package files, keyed by their directory.
+func packages(args []string) (map[string][]string, error) {
+	pkgs := make(map[string][]string)
+	if len(args) == 0 {
+		args = []string{"."} // current directory
 	}
-	// add package header to code
-	code = "package " + s.pkg.Name + code
-	f, err := parser.ParseFile(s.fset, "", code, 0)
-	if err != nil {
-		log.Fatal(err)
-	}
-	s.pkg.Files[filename] = f
-}
-
-func (s specializer) Visit(node ast.Node) ast.Visitor {
-	switch n := node.(type) {
-	case *ast.CallExpr:
-		switch fn := n.Fun.(type) {
-		case *ast.Ident:
-			if gen, ok := funcGenerators[fn.Name]; ok {
-				if v := s.types[n].Value; v != nil {
-					// some functions (namely max/min) may evaluate to a
-					// constant, in which case we should replace the call with
-					// a constant expression.
-					//
-					// NOTE: This is a bit of a hack, since n is still
-					// technically a CallExpr. Ideally we would rewrite it to
-					// a BasicLit (?), but that would require access to its
-					// parent node.
-					fn.Name = ""
-					n.Args = []ast.Expr{ast.NewIdent(v.ExactString())}
-					break
-				}
-
-				name, code, rewrite := gen(fn, n.Args, s.types)
-				s.addDecl(name, code)
-				rewrite(n)
+	for _, arg := range args {
+		pkg, err := build.Import(arg, ".", build.FindOnly)
+		if err != nil {
+			return nil, err
+		}
+		dir, err := os.Open(pkg.Dir)
+		if err != nil {
+			return nil, err
+		}
+		defer dir.Close()
+		filenames, err := dir.Readdirnames(0)
+		if err != nil {
+			return nil, err
+		}
+		for _, file := range filenames {
+			if strings.HasPrefix(file, "ply-") {
+				// don't include previous codegen; it will cause redefinition
+				// errors
+				continue
 			}
-
-		case *ast.SelectorExpr:
-			// Detect and construct a pipeline if possible. Otherwise,
-			// generate a single method.
-			var chain []*ast.CallExpr
-			cur := n
-			for ok := true; ok; cur, ok = cur.Fun.(*ast.SelectorExpr).X.(*ast.CallExpr) {
-				if _, ok := cur.Fun.(*ast.SelectorExpr); !ok {
-					break
-				}
-				chain = append(chain, cur)
-			}
-			if p := buildPipeline(chain, s.types); p != nil {
-				name, code, rewrite := p.gen()
-				s.addDecl(name, code)
-				rewrite(n)
-			} else if gen, ok := methodGenerators[fn.Sel.Name]; ok && !hasMethod(fn.X, fn.Sel.Name, s.types) {
-				name, code, rewrite := gen(fn, n.Args, s.types)
-				s.addDecl(name, code)
-				rewrite(n)
+			if strings.HasSuffix(file, ".go") || strings.HasSuffix(file, ".ply") {
+				pkgs[pkg.Dir] = append(pkgs[pkg.Dir], filepath.Join(pkg.Dir, file))
 			}
 		}
 	}
-	return s
+	return pkgs, nil
 }
 
 func main() {
 	log.SetFlags(0)
+	goFlags := flag.String("goflags", "", "Flags to be supplied to the Go compiler")
 	flag.Parse()
+	args := flag.Args()
+	if len(args) == 0 || args[0] == "version" {
+		fmt.Printf("ply v%s\nCommit: %s\nBuild Date: %s\n", version, githash, builddate)
+		return
+	}
 
-	// parse each supplied file
-	fset := token.NewFileSet()
-	var files []*ast.File
-	plyFiles := make(map[string]*ast.File)
-	for _, arg := range flag.Args() {
-		f, err := parser.ParseFile(fset, arg, nil, parser.ParseComments)
+	if isFileList(args[1:]) {
+		dir, pkg, err := adhoc(args[1:])
 		if err != nil {
 			log.Fatal(err)
 		}
-		files = append(files, f)
-		if filepath.Ext(arg) == ".ply" {
-			plyFiles[arg] = f
+
+		// delete .ply files from args
+		noply := args[:0]
+		for _, arg := range args {
+			if filepath.Ext(arg) != ".ply" {
+				noply = append(noply, arg)
+			}
 		}
-	}
+		args = noply
 
-	// type-check the package
-	info := types.Info{
-		Types: make(map[ast.Expr]types.TypeAndValue),
-	}
-	var conf types.Config
-	conf.Importer = importer.Default()
-	pkg, err := conf.Check("", fset, files, &info)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	// walk the AST of each .ply file in the package, generating ply functions
-	// and rewriting their callsites
-	spec := specializer{
-		types: info.Types,
-		fset:  fset,
-		pkg: &ast.Package{
-			Name:  pkg.Name(),
-			Files: make(map[string]*ast.File),
-		},
-	}
-	for _, f := range plyFiles {
-		ast.Walk(spec, f)
-	}
-
-	// combine generated ply functions into a single file and write it to the
-	// current directory
-	merged := ast.MergePackageFiles(spec.pkg, ast.FilterFuncDuplicates|ast.FilterImportDuplicates)
-	implFile, err := os.Create("ply_impls.go")
-	if err != nil {
-		log.Fatal(err)
-	}
-	printer.Fprint(implFile, fset, merged)
-
-	// output a .go file for each .ply file
-	for path, f := range plyFiles {
-		goFile, err := os.Create(path + ".go")
+		plyFiles, err := codegen.Compile(pkg)
 		if err != nil {
 			log.Fatal(err)
 		}
-		printer.Fprint(goFile, fset, f)
+		for name, code := range plyFiles {
+			filename := filepath.Join(dir, name)
+			err = ioutil.WriteFile(filename, code, 0666)
+			if err != nil {
+				log.Fatal(err)
+			}
+			// add compiled .ply files to args
+			args = append(args, filename)
+		}
+	} else if args[0] != "run" {
+		pkgs, err := packages(args[1:])
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		// for each package, compile the .ply files and write them to the
+		// package directory.
+		for dir, pkg := range pkgs {
+			plyFiles, err := codegen.Compile(pkg)
+			if err != nil {
+				log.Fatal(err)
+			}
+			for name, code := range plyFiles {
+				filename := filepath.Join(dir, name)
+				err = ioutil.WriteFile(filename, code, 0666)
+				if err != nil {
+					log.Fatal(err)
+				}
+			}
+		}
 	}
 
-	// invoke the Go compiler
-	cmd := exec.Command("go", "build")
+	// invoke the Go compiler, passing on any flags
+	args = append(append([]string{args[0]}, strings.Fields(*goFlags)...), args[1:]...)
+	cmd := exec.Command("go", args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	err = cmd.Run()
-	if err != nil {
+	err := cmd.Run()
+	if _, ok := err.(*exec.ExitError); !ok && err != nil {
 		log.Fatal(err)
 	}
 }

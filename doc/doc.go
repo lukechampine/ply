@@ -1,3 +1,5 @@
+// +build ignore
+
 // Package ply is a pseudo-package that documents the builtin functions and
 // methods added by the Ply compiler.
 //
@@ -136,7 +138,7 @@ func Max(x, y T) T
 //
 // Like append, merge is only valid as an expression, not a statement. In
 // other words, you *must* make use of its return value.
-func Merge(recv, rest ...map[T]U) map[T]U
+func Merge(recv map[T]U, rest ...map[T]U) map[T]U
 
 // Min returns the smaller of x or y, as determined by the > operator. T must
 // be an ordered type; see https://golang.org/ref/spec#Comparison_operators

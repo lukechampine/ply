@@ -34,13 +34,8 @@ func run(code string) (string, error) {
 	if err = ioutil.WriteFile("test.ply", []byte(code), 0666); err != nil {
 		return "", err
 	}
-	cmd := exec.Command(plyPath, "test.ply")
+	cmd := exec.Command(plyPath, "run", "test.ply")
 	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return string(output), err
-	}
-	cmd = exec.Command("./" + filepath.Base(dir))
-	output, err = cmd.CombinedOutput()
 	return strings.TrimSpace(string(output)), err
 }
 

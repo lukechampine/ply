@@ -63,14 +63,15 @@ First, install the Ply compiler:
 go get github.com/lukechampine/ply
 ```
 
-`ply test.ply` will compile `test.ply` to `test.ply.go` and generate a
-`ply_impls.go` file containing the specific implementations of any generics
-used in `test.ply`. It will then invoke `go build` in the directory to
-generate an executable.
+The `ply` command behaves similarly to the `go` command. In fact, you can run
+any `go` subcommand through `ply`, including `build`, `run`, `install`, and
+even `test`.
 
-I'm aware that this isn't very ergonomic. Once most of the generic functions
-are implemented, I will make `ply` a more complete build tool. Ideally, it
-will function identically to the `go` command.
+When you run `ply run test.ply`, `ply` parses `test.ply` and generates a
+`ply-impls.go` file containing the specific implementations of any generics
+used in `test.ply`. It then rewrites `test.ply` as a standard Go file,
+`ply-test.go`, that calls those implementations. Finally, `go run` is invoked
+on `ply-test.go` and `ply-impls.go`.
 
 
 Supported Functions and Methods
@@ -312,9 +313,15 @@ want to avoid that. Go's simplicity is one of its biggest strengths.
 
 **How does Ply interact with the existing Go toolchain?**
 
-Poorly. Once the language is more mature, I'll focus on making it easier to
-integrate alongside your existing Go code. Ideally, you could symlink `go` to
-`ply` and transparently compile both Go and Ply source.
+One nice thing about Ply is that because it has the same syntax as Go, many
+tools built for Go will "just work" with Ply. For example, you can run `gofmt`
+and `golint` on `.ply` files. Other tools (like `go vet`) are pickier about
+their input filenames ending in `.go`, but will work if you rename your `.ply`
+files. Lastly, tools that require type information will fail, because Go's
+type-checker does not understand Ply builtins.
+
+One current deficiency is that Ply will not automatically compile imported
+`.ply` files. So you can't write pure-Ply packages (yet).
 
 **Will you add support for feature X?**
 
