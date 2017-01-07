@@ -250,6 +250,7 @@ func (xs #name) pipeline(#params) #ret {
 			Args: []ast.Expr{X},
 		}
 		fn.Sel = ast.NewIdent("pipeline")
+		fn.Sel.NamePos = p.fns[0].Fun.(*ast.SelectorExpr).Sel.Pos()
 		c.Args = args
 	}
 	return

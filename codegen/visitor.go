@@ -65,6 +65,7 @@ func (s specializer) Visit(node ast.Node) ast.Visitor {
 					// parent node.
 					fn.Name = ""
 					n.Args = []ast.Expr{ast.NewIdent(v.ExactString())}
+					n.Rparen = 0
 					break
 				}
 
