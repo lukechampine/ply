@@ -31,27 +31,6 @@ func rewriteMethod(name string) rewriter {
 	}
 }
 
-// func rewriteReassign(reassign ast.Expr) rewriter {
-// 	return func(c *ast.CallExpr) ast.Node {
-// 		c.Args = append(c.Args, reassign)
-// 		return c
-// 	}
-// }
-
-// func rewriteMethodReassign(name string, reassign ast.Expr) rewriter {
-// 	return func(c *ast.CallExpr) ast.Node {
-// 		n := rewriteMethod(name)(c)
-// 		return rewriteReassign(reassign)(n.(*ast.CallExpr))
-// 	}
-// }
-
-// func rewriteFuncReassign(name string, reassign ast.Expr) rewriter {
-// 	return func(c *ast.CallExpr) ast.Node {
-// 		n := rewriteFunc(name)(c)
-// 		return rewriteReassign(reassign)(n.(*ast.CallExpr))
-// 	}
-// }
-
 var funcGenerators = map[string]func(*ast.Ident, []ast.Expr, map[ast.Expr]types.TypeAndValue) (string, string, rewriter){
 	"max":   maxGen,
 	"merge": mergeGen,
@@ -207,25 +186,6 @@ func #name(fn func(a #T, b #U) #V, a []#T, b []#U) []#V {
 }
 `
 
-const zipReassignTempl = `
-func #name(fn func(a #T, b #U) #V, a []#T, b []#U, reassign []#V) []#V {
-	var n int = len(a)
-	if len(b) < len(a) {
-		n = len(b)
-	}
-	var zipped []#V
-	if cap(reassign) >= n {
-		zipped = reassign[:n]
-	} else {
-		zipped = make([]#V, n)
-	}
-	for i := range zipped {
-		zipped[i] = fn(a[i], b[i])
-	}
-	return zipped
-}
-`
-
 func zipGen(fn *ast.Ident, args []ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
 	// determine arg types
 	sig := exprTypes[args[0]].Type.(*types.Signature)
@@ -336,20 +296,6 @@ func (xs #name) dropWhile(pred func(#T) bool) []#T {
 }
 `
 
-const dropWhileReassignTempl = `
-type #name []#T
-
-func (xs #name) dropWhile(pred func(#T) bool, reassign []#T) []#T {
-	var i int
-	for i = range xs {
-		if !pred(xs[i]) {
-			break
-		}
-	}
-	return append(reassign[:0], xs[i:]...)
-}
-`
-
 func dropWhileGen(fn *ast.SelectorExpr, args []ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
 	T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem()
 	return genMethod(dropWhileTempl, "dropWhile_slice", T)
@@ -367,23 +313,6 @@ func (m #name) elems() []#U {
 }
 `
 
-const elemsReassignTempl = `
-type #name map[#T]#U
-
-func (m #name) elems(reassign []#U) []#U {
-	var es []#U
-	if cap(reassign) >= len(m) {
-		es = reassign[:0]
-	} else {
-		es = make([]#U, 0, len(m))
-	}
-	for _, e := range m {
-		es = append(es, e)
-	}
-	return es
-}
-`
-
 func elemsGen(fn *ast.SelectorExpr, args []ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
 	mt := exprTypes[fn.X].Type.Underlying().(*types.Map)
 	return genMethod(elemsTempl, "elems_map", mt.Key(), mt.Elem())
@@ -394,20 +323,6 @@ type #name []#T
 
 func (xs #name) filter(pred func(#T) bool) []#T {
 	var filtered []#T
-	for _, x := range xs {
-		if pred(x) {
-			filtered = append(filtered, x)
-		}
-	}
-	return filtered
-}
-`
-
-const filterReassignTempl = `
-type #name []#T
-
-func (xs #name) filter(pred func(#T) bool, reassign []#T) []#T {
-	filtered := reassign[:0]
 	for _, x := range xs {
 		if pred(x) {
 			filtered = append(filtered, x)
@@ -510,23 +425,6 @@ func (m #name) keys() []#T {
 }
 `
 
-const keysReassignTempl = `
-type #name map[#T]#U
-
-func (m #name) keys(reassign []#T) []#T {
-	var ks []#T
-	if cap(reassign) >= len(m) {
-		ks = reassign[:0]
-	} else {
-		ks = make([]#T, 0, len(m))
-	}
-	for k := range m {
-		ks = append(ks, k)
-	}
-	return ks
-}
-`
-
 func keysGen(fn *ast.SelectorExpr, args []ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
 	mt := exprTypes[fn.X].Type.Underlying().(*types.Map)
 	return genMethod(keysTempl, "keys_map", mt.Key(), mt.Elem())
@@ -537,23 +435,6 @@ type #name []#T
 
 func (xs #name) morph(fn func(#T) #U) []#U {
 	morphed := make([]#U, len(xs))
-	for i := range xs {
-		morphed[i] = fn(xs[i])
-	}
-	return morphed
-}
-`
-
-const morphReassignTempl = `
-type #name []#T
-
-func (xs #name) morph(fn func(#T) #U, reassign []#U) []#U {
-	var morphed []#U
-	if cap(reassign) >= len(xs) {
-		morphed = reassign[:len(xs)]
-	} else {
-		morphed = make([]#U, len(xs))
-	}
 	for i := range xs {
 		morphed[i] = fn(xs[i])
 	}
@@ -607,9 +488,6 @@ func (xs #name) reverse() []#T {
 `
 
 func reverseGen(fn *ast.SelectorExpr, args []ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
-	// NOTE: we can't safely use reassign because it may be the same slice
-	// that we're reversing. Since we don't have a way of knowing (slices
-	// don't support ==), we unfortunately cannot ever reuse existing memory.
 	T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem()
 	return genMethod(reverseTempl, "reverse_slice", T)
 }
@@ -625,20 +503,6 @@ func (xs #name) takeWhile(pred func(#T) bool) []#T {
 		}
 	}
 	return append([]#T(nil), xs[:i]...)
-}
-`
-
-const takeWhileReassignTempl = `
-type #name []#T
-
-func (xs #name) takeWhile(pred func(#T) bool, reassign []#T) []#T {
-	var i int
-	for i = range xs {
-		if !pred(xs[i]) {
-			break
-		}
-	}
-	return append(reassign[:0], xs[:i]...)
 }
 `
 
