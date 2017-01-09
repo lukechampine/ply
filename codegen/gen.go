@@ -8,43 +8,49 @@ import (
 	"github.com/lukechampine/ply/types"
 )
 
-type rewriter func(*ast.CallExpr)
+type rewriter func(*ast.CallExpr) ast.Node
 
 func rewriteFunc(name string) rewriter {
-	return func(c *ast.CallExpr) {
-		c.Fun.(*ast.Ident).Name = name
+	return func(c *ast.CallExpr) ast.Node {
+		c.Fun = ast.NewIdent(name)
+		return c
 	}
 }
 
 func rewriteMethod(name string) rewriter {
-	return func(c *ast.CallExpr) {
+	return func(c *ast.CallExpr) ast.Node {
 		fn := c.Fun.(*ast.SelectorExpr)
-		fn.X = &ast.CallExpr{
-			Fun:  ast.NewIdent(name),
-			Args: []ast.Expr{fn.X},
+		c.Fun = &ast.SelectorExpr{
+			X: &ast.CallExpr{
+				Fun:  ast.NewIdent(name),
+				Args: []ast.Expr{fn.X},
+			},
+			Sel: ast.NewIdent(fn.Sel.Name),
 		}
+		return c
 	}
 }
 
-func rewriteReassign(reassign ast.Expr) rewriter {
-	return func(c *ast.CallExpr) {
-		c.Args = append(c.Args, reassign)
-	}
-}
+// func rewriteReassign(reassign ast.Expr) rewriter {
+// 	return func(c *ast.CallExpr) ast.Node {
+// 		c.Args = append(c.Args, reassign)
+// 		return c
+// 	}
+// }
 
-func rewriteMethodReassign(name string, reassign ast.Expr) rewriter {
-	return func(c *ast.CallExpr) {
-		rewriteMethod(name)(c)
-		rewriteReassign(reassign)(c)
-	}
-}
+// func rewriteMethodReassign(name string, reassign ast.Expr) rewriter {
+// 	return func(c *ast.CallExpr) ast.Node {
+// 		n := rewriteMethod(name)(c)
+// 		return rewriteReassign(reassign)(n.(*ast.CallExpr))
+// 	}
+// }
 
-func rewriteFuncReassign(name string, reassign ast.Expr) rewriter {
-	return func(c *ast.CallExpr) {
-		rewriteFunc(name)(c)
-		rewriteReassign(reassign)(c)
-	}
-}
+// func rewriteFuncReassign(name string, reassign ast.Expr) rewriter {
+// 	return func(c *ast.CallExpr) ast.Node {
+// 		n := rewriteFunc(name)(c)
+// 		return rewriteReassign(reassign)(n.(*ast.CallExpr))
+// 	}
+// }
 
 var funcGenerators = map[string]func(*ast.Ident, []ast.Expr, map[ast.Expr]types.TypeAndValue) (string, string, rewriter){
 	"max":   maxGen,

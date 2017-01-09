@@ -243,15 +243,16 @@ func (xs #name) pipeline(#params) #ret {
 
 	// rewriter
 	X := p.fns[0].Fun.(*ast.SelectorExpr).X
-	r = func(c *ast.CallExpr) {
-		fn := c.Fun.(*ast.SelectorExpr)
-		fn.X = &ast.CallExpr{
-			Fun:  ast.NewIdent(name),
-			Args: []ast.Expr{X},
+	r = func(c *ast.CallExpr) ast.Node {
+		c.Fun = &ast.SelectorExpr{
+			X: &ast.CallExpr{
+				Fun:  ast.NewIdent(name),
+				Args: []ast.Expr{X},
+			},
+			Sel: ast.NewIdent("pipeline"),
 		}
-		fn.Sel = ast.NewIdent("pipeline")
-		fn.Sel.NamePos = p.fns[0].Fun.(*ast.SelectorExpr).Sel.Pos()
 		c.Args = args
+		return c
 	}
 	return
 }
