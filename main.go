@@ -112,7 +112,9 @@ func main() {
 			// add compiled .ply files to args
 			args = append(args, filename)
 		}
-	} else if args[0] != "run" {
+	} else if args[0] == "run" {
+		log.Fatal("ply run: no .ply or .go files listed")
+	} else {
 		pkgs, err := packages(args[1:])
 		if err != nil {
 			log.Fatal(err)
@@ -133,6 +135,11 @@ func main() {
 				}
 			}
 		}
+	}
+
+	// if just compiling, exit early
+	if args[0] == "compile" {
+		return
 	}
 
 	// invoke the Go compiler, passing on any flags
