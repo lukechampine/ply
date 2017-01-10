@@ -142,7 +142,7 @@ func Compile(filenames []string) (map[string][]byte, error) {
 
 	// write compiled files to set
 	set := make(map[string][]byte)
-	pcfg := &printer.Config{Tabwidth: 8, Mode: printer.SourcePos}
+	pcfg := &printer.Config{Tabwidth: 8, Mode: printer.RawFormat | printer.SourcePos}
 	for name, f := range plyFiles {
 		var buf bytes.Buffer
 		pcfg.Fprint(&buf, fset, f)
