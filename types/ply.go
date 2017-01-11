@@ -459,10 +459,12 @@ func lookupPlyMethod(T Type, name string) (obj Object, index []int, indirect boo
 		methods = map[string]method{
 			"all":       {[]Type{pred}, Typ[Bool], false},      // ([]T).all(func(T) bool) bool
 			"any":       {[]Type{pred}, Typ[Bool], false},      // ([]T).any(func(T) bool) bool
+			"drop":      {[]Type{Typ[Int]}, t, false},          // ([]T).drop(int) []T
 			"dropWhile": {[]Type{pred}, t, false},              // ([]T).dropWhile(func(T) bool) []T
 			"filter":    {[]Type{pred}, t, false},              // ([]T).filter(func(T) bool) []T
 			"foreach":   {[]Type{side}, nil, false},            // ([]T).foreach(func(T))
 			"reverse":   {nil, t, false},                       // ([]T).reverse() []T
+			"take":      {[]Type{Typ[Int]}, t, false},          // ([]T).take(int) []T
 			"takeWhile": {[]Type{pred}, t, false},              // ([]T).takeWhile(func(T) bool) []T
 			"tee":       {[]Type{side}, t, false},              // ([]T).tee(func(T)) []T
 			"toSet":     {nil, NewMap(t.Elem(), empty), false}, // ([]T).toSet() map[T]struct{}

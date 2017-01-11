@@ -43,6 +43,7 @@ var methodGenerators = map[string]func(*ast.SelectorExpr, []ast.Expr, map[ast.Ex
 	"all":       allGen,
 	"any":       anyGen,
 	"contains":  containsGen,
+	"drop":      dropGen,
 	"dropWhile": dropWhileGen,
 	"elems":     elemsGen,
 	"filter":    filterGen,
@@ -51,6 +52,7 @@ var methodGenerators = map[string]func(*ast.SelectorExpr, []ast.Expr, map[ast.Ex
 	"keys":      keysGen,
 	"morph":     morphGen,
 	"reverse":   reverseGen,
+	"take":      takeGen,
 	"takeWhile": takeWhileGen,
 	"tee":       teeGen,
 	"toSet":     toSetGen,
@@ -282,6 +284,22 @@ func containsGen(fn *ast.SelectorExpr, args []ast.Expr, exprTypes map[ast.Expr]t
 	return
 }
 
+const dropTempl = `
+type #name []#T
+
+func (xs #name) drop(n int) []#T {
+	if n > len(xs) {
+		n = len(xs)
+	}
+	return xs[n:]
+}
+`
+
+func dropGen(fn *ast.SelectorExpr, args []ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
+	T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem()
+	return genMethod(dropTempl, "drop_slice", T)
+}
+
 const dropWhileTempl = `
 type #name []#T
 
@@ -490,6 +508,22 @@ func (xs #name) reverse() []#T {
 func reverseGen(fn *ast.SelectorExpr, args []ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
 	T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem()
 	return genMethod(reverseTempl, "reverse_slice", T)
+}
+
+const takeTempl = `
+type #name []#T
+
+func (xs #name) take(n int) []#T {
+	if n > len(xs) {
+		n = len(xs)
+	}
+	return xs[:n]
+}
+`
+
+func takeGen(fn *ast.SelectorExpr, args []ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
+	T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem()
+	return genMethod(takeTempl, "take_slice", T)
 }
 
 const takeWhileTempl = `

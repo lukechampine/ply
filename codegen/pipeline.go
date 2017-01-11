@@ -409,6 +409,41 @@ var transformations = map[string]transformation{
 		typeFn: justSliceElem,
 	},
 
+	"drop": transformation{
+		recv:   `[]#T`,
+		params: []string{`int`},
+		ret:    `[]#T`,
+
+		outline: `
+	var undropped []#T
+	#next
+	return undropped
+`,
+		setup: `
+	ndropped#arg1 := 0
+	#next
+`,
+		loop: `
+	if #arg1 > len(xs) {
+		#arg1 = len(xs)
+	}
+	ndropped#arg1 = #arg1
+	for _, x1 := range xs[#arg1:] {
+		#next
+	}
+`,
+		op: `
+		if ndropped#arg1++; ndropped#arg1 <= #arg1 {
+			continue
+		}
+		#next
+`,
+		cons: `
+		undropped = append(undropped, #x)
+`,
+		typeFn: justSliceElem,
+	},
+
 	"dropWhile": transformation{
 		recv:   `[]#T`,
 		params: []string{`func(#T) bool`},
@@ -594,6 +629,37 @@ var transformations = map[string]transformation{
 `,
 		cons: `
 		reversed = append(reversed, #x)
+`,
+		typeFn: justSliceElem,
+	},
+
+	"take": transformation{
+		recv:   `[]#T`,
+		params: []string{`int`},
+		ret:    `[]#T`,
+
+		outline: `
+	var taken []#T
+	#next
+	return taken
+`,
+		setup: `
+	ntaken#arg1 := 0
+	#next
+`,
+		loop: `
+	for _, x1 := range xs {
+		#next
+	}
+`,
+		op: `
+		if ntaken#arg1++; ntaken#arg1 > #arg1 {
+			break
+		}
+		#next
+`,
+		cons: `
+		taken = append(taken, #x)
 `,
 		typeFn: justSliceElem,
 	},

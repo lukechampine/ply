@@ -70,6 +70,16 @@ func (s SliceT) Any(pred func(T) bool) SliceT
 // As a special case, T may be a slice, map, or function if e is nil.
 func (s SliceT) Contains(e T) bool
 
+// Drop returns a slice omitting the first n elements of s. The returned slice
+// shares the same underlying memory as s. If n is greater than len(s), the
+// latter is used. In other words, Drop is short for:
+//
+//    s2 := s[min(n, len(s)):]
+//
+// Note that is s is nil, the returned slice will also be nil, whereas if s is
+// merely empty (but non-nil), the returned slice will also be non-nil.
+func (s SliceT) Drop(n int) SliceT
+
 // DropWhile returns a new slice omitting the initial elements of s that
 // satisfy pred. That is, unlike Filter, the slice returned by DropWhile is
 // guaranteed to be a contiguous subset of s beginning at the first element
@@ -106,6 +116,16 @@ func (s SliceT) Morph(fn func(T) U) SliceU
 
 // Reverse returns a new slice containing the elements of s in reverse order.
 func (s SliceT) Reverse() SliceT
+
+// Take returns a slice containing the first n elements of s. The returned
+// slice shares the same underlying memory as s. If n is greater than len(s),
+// the latter is used. In other words, Take is short for:
+//
+//    s2 := s[:min(n, len(s))]
+//
+// Note that is s is nil, the returned slice will also be nil, whereas if s is
+// merely empty (but non-nil), the returned slice will also be non-nil.
+func (s SliceT) Take(n int) SliceT
 
 // TakeWhile returns a new slice containing the initial elements of s that
 // satisfy pred. That is, unlike Filter, the slice returned by TakeWhile is

@@ -81,8 +81,8 @@ Supported Functions and Methods
 
 - Planned: `sort`, `repeat`, `compose`
 
-**Methods:** `all`, `any`, `contains`, `dropWhile`, `elems`, `filter`,
-`fold`, `foreach`, `keys`, `morph`, `reverse`, `takeWhile`, `tee`, `toSet`
+**Methods:** `all`, `any`, `contains`, `drop`, `dropWhile`, `elems`, `filter`,
+`fold`, `foreach`, `keys`, `morph`, `reverse`, `take`, `takeWhile`, `tee`, `toSet`
 
 - Planned: `join`, `replace`, `split`, `uniq`
 

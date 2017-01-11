@@ -270,3 +270,43 @@ func TestPipeline(t *testing.T) {
 		t.Error("pipeline failed:", sideEffects)
 	}
 }
+
+
+func TestTakeDrop(t *testing.T) {
+	xs := []int{1, 2, 3, 4, 5}
+	if !reflect.DeepEqual(xs.take(3), []int{1, 2, 3}) {
+		t.Error("take failed:", xs.take(3))
+	}
+	if !reflect.DeepEqual(xs.take(17), xs) {
+		t.Error("take failed:", xs.take(17))
+	}
+	if !reflect.DeepEqual([]int(nil).take(1), []int(nil)) {
+		t.Error("take failed:", []int(nil).take(1))
+	}
+	if !reflect.DeepEqual([]int{}.take(1), []int{}) {
+		t.Error("take failed:", []int{}.take(1))
+	}
+
+	if !reflect.DeepEqual(xs.drop(3), []int{4, 5}) {
+		t.Error("drop failed:", xs.drop(3))
+	}
+	if !reflect.DeepEqual(xs.drop(17), []int{}) {
+		t.Error("drop failed:", xs.drop(17))
+	}
+	if !reflect.DeepEqual([]int(nil).drop(1), []int(nil)) {
+		t.Error("drop failed:", []int(nil).drop(1))
+	}
+	if !reflect.DeepEqual([]int{}.drop(1), []int{}) {
+		t.Error("drop failed:", []int{}.drop(1))
+	}
+
+	ys := xs.drop(1).take(12).drop(2).take(1)
+	if !reflect.DeepEqual(ys, []int{4}) {
+		t.Error("take/drop pipeline failed:", ys)
+	}
+
+	zs := xs.take(12).drop(2).take(2).drop(1)
+	if !reflect.DeepEqual(zs, []int{4}) {
+		t.Error("take/drop pipeline failed:", zs)
+	}
+}
