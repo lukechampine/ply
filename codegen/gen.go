@@ -40,22 +40,22 @@ var funcGenerators = map[string]func(*ast.Ident, []ast.Expr, map[ast.Expr]types.
 }
 
 var methodGenerators = map[string]func(*ast.SelectorExpr, []ast.Expr, map[ast.Expr]types.TypeAndValue) (string, string, rewriter){
-	"all":       allGen,
-	"any":       anyGen,
+	"all":       genSliceMethod(allTempl, "all_slice"),
+	"any":       genSliceMethod(anyTempl, "any_slice"),
 	"contains":  containsGen,
-	"drop":      dropGen,
-	"dropWhile": dropWhileGen,
+	"drop":      genSliceMethod(dropTempl, "drop_slice"),
+	"dropWhile": genSliceMethod(dropWhileTempl, "dropWhile_slice"),
 	"elems":     elemsGen,
 	"filter":    filterGen,
 	"fold":      foldGen,
-	"foreach":   foreachGen,
+	"foreach":   genSliceMethod(foreachTempl, "foreach_slice"),
 	"keys":      keysGen,
 	"morph":     morphGen,
-	"reverse":   reverseGen,
-	"take":      takeGen,
-	"takeWhile": takeWhileGen,
-	"tee":       teeGen,
-	"toSet":     toSetGen,
+	"reverse":   genSliceMethod(reverseTempl, "reverse_slice"),
+	"take":      genSliceMethod(takeTempl, "take_slice"),
+	"takeWhile": genSliceMethod(takeWhileTempl, "takeWhile_slice"),
+	"tee":       genSliceMethod(teeTempl, "tee_slice"),
+	"toSet":     genSliceMethod(toSetTempl, "toSet_slice"),
 }
 
 var safeFnName = func() func(string) string {
@@ -95,6 +95,14 @@ func genMethod(templ, methodname string, typs ...types.Type) (name, code string,
 	code = specify(templ, name, typs...)
 	r = rewriteMethod(name)
 	return
+}
+
+// for slice methods that just need T
+func genSliceMethod(templ, methodname string) func(fn *ast.SelectorExpr, args []ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
+	return func(fn *ast.SelectorExpr, args []ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
+		T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem()
+		return genMethod(templ, methodname, T)
+	}
 }
 
 const maxTempl = `
@@ -210,11 +218,6 @@ func (xs #name) all(pred func(#T) bool) bool {
 }
 `
 
-func allGen(fn *ast.SelectorExpr, args []ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
-	T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem()
-	return genMethod(allTempl, "all_slice", T)
-}
-
 const anyTempl = `
 type #name []#T
 
@@ -227,11 +230,6 @@ func (xs #name) any(pred func(#T) bool) bool {
 	return false
 }
 `
-
-func anyGen(fn *ast.SelectorExpr, args []ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
-	T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem()
-	return genMethod(anyTempl, "any_slice", T)
-}
 
 const containsSliceTempl = `
 type #name []#T
@@ -295,11 +293,6 @@ func (xs #name) drop(n int) []#T {
 }
 `
 
-func dropGen(fn *ast.SelectorExpr, args []ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
-	T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem()
-	return genMethod(dropTempl, "drop_slice", T)
-}
-
 const dropWhileTempl = `
 type #name []#T
 
@@ -313,11 +306,6 @@ func (xs #name) dropWhile(pred func(#T) bool) []#T {
 	return append([]#T(nil), xs[i:]...)
 }
 `
-
-func dropWhileGen(fn *ast.SelectorExpr, args []ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
-	T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem()
-	return genMethod(dropWhileTempl, "dropWhile_slice", T)
-}
 
 const elemsTempl = `
 type #name map[#T]#U
@@ -426,11 +414,6 @@ func (xs #name) foreach(fn func(#T)) {
 }
 `
 
-func foreachGen(fn *ast.SelectorExpr, args []ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
-	T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem()
-	return genMethod(foreachTempl, "foreach_slice", T)
-}
-
 const keysTempl = `
 type #name map[#T]#U
 
@@ -505,11 +488,6 @@ func (xs #name) reverse() []#T {
 }
 `
 
-func reverseGen(fn *ast.SelectorExpr, args []ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
-	T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem()
-	return genMethod(reverseTempl, "reverse_slice", T)
-}
-
 const takeTempl = `
 type #name []#T
 
@@ -520,11 +498,6 @@ func (xs #name) take(n int) []#T {
 	return xs[:n]
 }
 `
-
-func takeGen(fn *ast.SelectorExpr, args []ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
-	T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem()
-	return genMethod(takeTempl, "take_slice", T)
-}
 
 const takeWhileTempl = `
 type #name []#T
@@ -540,11 +513,6 @@ func (xs #name) takeWhile(pred func(#T) bool) []#T {
 }
 `
 
-func takeWhileGen(fn *ast.SelectorExpr, args []ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
-	T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem()
-	return genMethod(takeWhileTempl, "takeWhile_slice", T)
-}
-
 const teeTempl = `
 type #name []#T
 
@@ -555,11 +523,6 @@ func (xs #name) tee(fn func(#T)) []#T {
 	return xs
 }
 `
-
-func teeGen(fn *ast.SelectorExpr, args []ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
-	T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem()
-	return genMethod(teeTempl, "tee_slice", T)
-}
 
 const toSetTempl = `
 type #name []#T
@@ -572,8 +535,3 @@ func (xs #name) toSet() map[#T]struct{} {
 	return set
 }
 `
-
-func toSetGen(fn *ast.SelectorExpr, args []ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
-	T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem()
-	return genMethod(toSetTempl, "toSet_slice", T)
-}
