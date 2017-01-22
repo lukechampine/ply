@@ -54,6 +54,13 @@ func TestMorph(t *testing.T) {
 	if !reflect.DeepEqual(ys, map[int8]string{-1: "y1", -2: "y2", -3: "y3"}) {
 		t.Error("morph failed:", xs)
 	}
+
+	// import
+	ss := []string{"foo", "bar", "baz"}
+	qs := ss.morph(strconv.Quote)
+	if !reflect.DeepEqual(qs, []string{`"foo"`, `"bar"`, `"baz"`}) {
+		t.Error("morph failed:", xs)
+	}
 }
 
 func TestFold(t *testing.T) {

@@ -93,6 +93,13 @@ func (s specializer) Rewrite(node ast.Node) (ast.Node, gorewrite.Rewriter) {
 	return node, s
 }
 
+func astToBytes(fset *token.FileSet, node interface{}) []byte {
+	var buf bytes.Buffer
+	pcfg := &printer.Config{Tabwidth: 8, Mode: printer.RawFormat | printer.SourcePos}
+	pcfg.Fprint(&buf, fset, node)
+	return buf.Bytes()
+}
+
 // Compile compiles the provided files as a single package. For each supplied
 // .ply file, the compiled Go code is returned, keyed by a suggested filename
 // (not a full filepath).
@@ -104,7 +111,7 @@ func Compile(filenames []string) (map[string][]byte, error) {
 	for _, arg := range filenames {
 		f, err := parser.ParseFile(fset, arg, nil, parser.ParseComments)
 		if err != nil {
-			log.Fatal(err)
+			return nil, err
 		}
 		files = append(files, f)
 		if filepath.Ext(arg) == ".ply" {
@@ -123,7 +130,7 @@ func Compile(filenames []string) (map[string][]byte, error) {
 	conf.Importer = importer.Default()
 	pkg, err := conf.Check("", fset, files, &info)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 
 	// walk the AST of each .ply file in the package, generating ply functions
@@ -142,21 +149,16 @@ func Compile(filenames []string) (map[string][]byte, error) {
 
 	// write compiled files to set
 	set := make(map[string][]byte)
-	pcfg := &printer.Config{Tabwidth: 8, Mode: printer.RawFormat | printer.SourcePos}
 	for name, f := range plyFiles {
-		var buf bytes.Buffer
-		pcfg.Fprint(&buf, fset, f)
 		name = "ply-" + strings.Replace(filepath.Base(name), ".ply", ".go", -1)
-		set[name] = buf.Bytes()
+		set[name] = astToBytes(fset, f)
 	}
 
 	// combine generated ply functions into a single file
 	merged := ast.MergePackageFiles(spec.pkg, ast.FilterFuncDuplicates|ast.FilterImportDuplicates)
 
 	// add ply-impls to set
-	var buf bytes.Buffer
-	printer.Fprint(&buf, fset, merged)
-	set["ply-impls.go"] = buf.Bytes()
+	set["ply-impls.go"] = astToBytes(fset, merged)
 
-	return set, err
+	return set, nil
 }
