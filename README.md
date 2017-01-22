@@ -197,6 +197,27 @@ effects, parallelizing may cause a race condition. So this optimization must
 be specifically requested by the caller via separate identifiers, e.g.
 `pmorph`, `pfilter`, etc.
 
+**Reassignment (planned):**
+
+It is a common pattern to reassign the result of a transformation to the
+original variable, for example when filtering or reversing a slice. In such
+cases, we would like to reuse the existing slice's memory instead of
+allocating a new one. At one time, Ply did this automatically (by detecting
+reassignment), but the feature was later removed because it is not provably
+safe. If the underlying slice memory is referenced by a different variable,
+then silently performing this optimization would affect that memory as well,
+which is surprising behavior.
+
+However, this optimization remains important. It is directly in line with
+Ply's goal of generating code that is as good as the hand-written version. We
+just need a different approach; probably a more explicit one. This could take
+the form of separate identifiers (e.g. `rfilter`), similar to parallelization.
+But this leads to an unfortunate bifurcation: what if you want both
+reassignment and parallelization? So now we need four different forms:
+standard, parallel, reassigned, and parallel reassigned, each with its own
+identifier. More identifiers means more burden on the programmer, so I'm
+hesistant to implement this approach until I've given it more thought.
+
 **Compile-time evaluation:**
 
 A few functions (currently just `max` and `min`) can be evaluated at compile
@@ -216,7 +237,10 @@ literals. For example:
 []int{1, 2, 3}.contains(3) // compile to true?
 ```
 
-However, this is not currently implemented, and may well be terrible idea.
+We could even go further and support arbitrary compile-time execution. But
+that seems a little dangerous. At best, it's useful for things like computing
+a large table instead of including it in the source. But I don't think that
+single case warrants such a powerful feature.
 
 **Function hoisting (planned):**
 
