@@ -317,3 +317,25 @@ func TestTakeDrop(t *testing.T) {
 		t.Error("take/drop pipeline failed:", zs)
 	}
 }
+
+func TestSort(t *testing.T) {
+	xs := []int{5,2,4,3,1}
+	if !reflect.DeepEqual(xs.sort(), []int{1,2,3,4,5}) {
+		t.Error("sort failed:", xs.sort())
+	}
+
+	ys := xs.sort().take(2)
+	if !reflect.DeepEqual(ys, []int{1,2}) {
+		t.Error("sort failed:", ys)
+	}
+	zs := xs.take(2).sort()
+	if !reflect.DeepEqual(zs, []int{2,5}) {
+		t.Error("sort failed:", zs)
+	}
+
+	// custom sort function
+	descending := func(x, y int) bool { return x > y }
+	if !reflect.DeepEqual(xs.sort(descending), []int{5,4,3,2,1}) {
+		t.Error("sort failed:", xs.sort(descending))
+	}
+}

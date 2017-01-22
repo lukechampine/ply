@@ -52,6 +52,7 @@ var methodGenerators = map[string]func(*ast.SelectorExpr, []ast.Expr, map[ast.Ex
 	"keys":      keysGen,
 	"morph":     morphGen,
 	"reverse":   genSliceMethod(reverseTempl, "reverse_slice"),
+	"sort":      sortGen,
 	"take":      genSliceMethod(takeTempl, "take_slice"),
 	"takeWhile": genSliceMethod(takeWhileTempl, "takeWhile_slice"),
 	"tee":       genSliceMethod(teeTempl, "tee_slice"),
@@ -487,6 +488,51 @@ func (xs #name) reverse() []#T {
 	return reversed
 }
 `
+const sortTempl = `
+type #name []#T
+
+func (xs #name) Len() int           { return len(xs) }
+func (xs #name) Swap(i, j int)      { xs[i], xs[j] = xs[j], xs[i] }
+func (xs #name) Less(i, j int) bool { return xs[i] < xs[j] }
+
+func (xs #name) sort() []#T {
+	s := make([]#T, len(xs))
+	copy(s, xs)
+	sort.Sort(#name(s))
+	return s
+}
+`
+
+const sortByTempl = `
+type #name []#T
+
+type #namesorter struct {
+	data []#T
+	less func(#T, #T) bool
+}
+
+func (xs #namesorter) Len() int { return len(xs.data) }
+func (xs #namesorter) Swap(i, j int) { xs.data[i], xs.data[j] = xs.data[j], xs.data[i] }
+func (xs #namesorter) Less(i, j int) bool { return xs.less(xs.data[i], xs.data[j]) }
+
+func (xs #name) sort(less func(#T, #T) bool) []#T {
+	s := #namesorter{make([]#T, len(xs)), less}
+	copy(s.data, xs)
+	sort.Sort(s)
+	return s.data
+}
+`
+
+func sortGen(fn *ast.SelectorExpr, args []ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
+	// determine arg types
+	T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem()
+	if len(args) == 0 {
+		return genMethod(sortTempl, "sort_slice", T)
+	} else if len(args) == 1 {
+		return genMethod(sortByTempl, "sortBy_slice", T)
+	}
+	return
+}
 
 const takeTempl = `
 type #name []#T

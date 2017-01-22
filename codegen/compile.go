@@ -14,15 +14,17 @@ import (
 	"github.com/lukechampine/ply/types"
 
 	"github.com/tsuna/gorewrite"
+	"golang.org/x/tools/go/ast/astutil"
 )
 
 // A specializer is a Rewriter that generates specialized versions of each
 // generic ply function and rewrites the callsites to use their corresponding
 // specialized function.
 type specializer struct {
-	types map[ast.Expr]types.TypeAndValue
-	fset  *token.FileSet
-	pkg   *ast.Package
+	types   map[ast.Expr]types.TypeAndValue
+	fset    *token.FileSet
+	pkg     *ast.Package
+	imports map[string]struct{}
 }
 
 func hasMethod(recv ast.Expr, method string, exprTypes map[ast.Expr]types.TypeAndValue) bool {
@@ -87,6 +89,9 @@ func (s specializer) Rewrite(node ast.Node) (ast.Node, gorewrite.Rewriter) {
 				name, code, rewrite := gen(fn, n.Args, s.types)
 				s.addDecl(name, code)
 				node = rewrite(n)
+				if fn.Sel.Name == "sort" {
+					s.imports["sort"] = struct{}{}
+				}
 			}
 		}
 	}
@@ -142,6 +147,7 @@ func Compile(filenames []string) (map[string][]byte, error) {
 			Name:  pkg.Name(),
 			Files: make(map[string]*ast.File),
 		},
+		imports: make(map[string]struct{}),
 	}
 	for _, f := range plyFiles {
 		gorewrite.Rewrite(spec, f)
@@ -156,6 +162,10 @@ func Compile(filenames []string) (map[string][]byte, error) {
 
 	// combine generated ply functions into a single file
 	merged := ast.MergePackageFiles(spec.pkg, ast.FilterFuncDuplicates|ast.FilterImportDuplicates)
+	// add imports
+	for importPath := range spec.imports {
+		astutil.AddImport(fset, merged, importPath)
+	}
 
 	// add ply-impls to set
 	set["ply-impls.go"] = astToBytes(fset, merged)

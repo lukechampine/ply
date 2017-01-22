@@ -28,9 +28,6 @@ type W int
 // SliceT is a slice with element type T.
 type SliceT int
 
-// SliceT is a slice with element type U.
-type SliceU int
-
 // MapTU is a map with element type T and key type U.
 type MapTU int
 
@@ -58,11 +55,11 @@ func (m MapTU) Morph(fn func(T, U) (V, W)) map[V]W
 
 // All returns true if all elements of s satisfy pred. It returns as soon as
 // it encounters an element that does not satisfy pred.
-func (s SliceT) All(pred func(T) bool) SliceT
+func (s SliceT) All(pred func(T) bool) []T
 
 // Any returns true if any elements of s satisfy pred. It returns as soon as
 // it encounters an element that satisfies pred.
-func (s SliceT) Any(pred func(T) bool) SliceT
+func (s SliceT) Any(pred func(T) bool) []T
 
 // Contains returns true if s contains e. T must be a comparable type; see
 // https://golang.org/ref/spec#Comparison_operators
@@ -78,17 +75,17 @@ func (s SliceT) Contains(e T) bool
 //
 // Note that is s is nil, the returned slice will also be nil, whereas if s is
 // merely empty (but non-nil), the returned slice will also be non-nil.
-func (s SliceT) Drop(n int) SliceT
+func (s SliceT) Drop(n int) []T
 
 // DropWhile returns a new slice omitting the initial elements of s that
 // satisfy pred. That is, unlike Filter, the slice returned by DropWhile is
 // guaranteed to be a contiguous subset of s beginning at the first element
 // that does not satisfy pred.
-func (s SliceT) DropWhile(pred func(T) bool) SliceT
+func (s SliceT) DropWhile(pred func(T) bool) []T
 
 // Filter returns a new slice containing only the elements of s that satisfy
 // pred.
-func (s SliceT) Filter(pred func(T) bool) SliceT
+func (s SliceT) Filter(pred func(T) bool) []T
 
 // Fold returns the result of repeatedly applying fn to an initial
 // "accumulator" value and each element of s. If no initial value is provided,
@@ -112,10 +109,17 @@ func (s SliceT) Foreach(fn func(T))
 
 // Morph returns a new slice containing the result of applying fn to each
 // element of s.
-func (s SliceT) Morph(fn func(T) U) SliceU
+func (s SliceT) Morph(fn func(T) U) []U
 
 // Reverse returns a new slice containing the elements of s in reverse order.
-func (s SliceT) Reverse() SliceT
+func (s SliceT) Reverse() []T
+
+// Sort returns a new slice containing the elements of s in sorted order,
+// according to the less function. If less is not supplied, s must either be
+// an ordered type or implement sort.Interface. In the former case, the <
+// operator is used as the less function. See
+// https://golang.org/ref/spec#Comparison_operators
+func (s SliceT) Sort(less func(T, T) bool) []T
 
 // Take returns a slice containing the first n elements of s. The returned
 // slice shares the same underlying memory as s. If n is greater than len(s),
@@ -125,12 +129,12 @@ func (s SliceT) Reverse() SliceT
 //
 // Note that is s is nil, the returned slice will also be nil, whereas if s is
 // merely empty (but non-nil), the returned slice will also be non-nil.
-func (s SliceT) Take(n int) SliceT
+func (s SliceT) Take(n int) []T
 
 // TakeWhile returns a new slice containing the initial elements of s that
 // satisfy pred. That is, unlike Filter, the slice returned by TakeWhile is
 // guaranteed to be a contiguous subset of s beginning at the first element.
-func (s SliceT) TakeWhile(pred func(T) bool) SliceT
+func (s SliceT) TakeWhile(pred func(T) bool) []T
 
 // Tee calls fn on each element of s and returns s unmodified.
 func (s SliceT) Tee(fn func(T)) []T

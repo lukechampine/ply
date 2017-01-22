@@ -79,10 +79,11 @@ Supported Functions and Methods
 
 **Builtins:** `max`, `merge`, `min`, `not`, `zip`
 
-- Planned: `sort`, `repeat`, `compose`
+- Planned: `repeat`, `compose`
 
 **Methods:** `all`, `any`, `contains`, `drop`, `dropWhile`, `elems`, `filter`,
-`fold`, `foreach`, `keys`, `morph`, `reverse`, `take`, `takeWhile`, `tee`, `toSet`
+`fold`, `foreach`, `keys`, `morph`, `reverse`, `sort`, `take`, `takeWhile`,
+`tee`, `toSet`
 
 - Planned: `join`, `replace`, `split`, `uniq`
 

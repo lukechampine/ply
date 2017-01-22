@@ -25,6 +25,7 @@ const (
 	_Fold
 	_Morph
 	_Reverse
+	_Sort
 	_TakeWhile
 	_ToSet
 )
@@ -55,6 +56,7 @@ var predeclaredPlyMethods = [...]struct {
 	_Fold:      {"fold", 1, true}, // 1 optional argument
 	_Morph:     {"morph", 1, false},
 	_Reverse:   {"reverse", 0, false},
+	_Sort:      {"sort", 0, true}, // 1 optional argument
 	_TakeWhile: {"takeWhile", 1, false},
 	_ToSet:     {"toSet", 0, false},
 }
@@ -432,6 +434,32 @@ func (check *Checker) plySpecialMethod(x *operand, call *ast.CallExpr, recv Type
 			unreachable()
 		}
 
+	case _Sort:
+		// ([]T).sort() []T
+		// ([]T).sort(func(T, T) bool) []T
+		if nargs > 1 {
+			check.errorf(call.Pos(), "sort expects 0 or 1 argument; got %v", nargs)
+			return
+		}
+		T := recv.Underlying().(*Slice).Elem() // enforced by lookupPlyMethod
+
+		// sortfn is optional
+		if nargs == 1 {
+			arg(x, 0)
+			if x.mode == invalid {
+				return
+			}
+			if !Identical(x.typ, makeSig(Typ[Bool], T, T)) {
+				check.invalidArg(x.pos(), "cannot use %s as func(%s, %s) bool value in argument to sort", x, T, T)
+				return
+			}
+		}
+		x.mode = value
+		x.typ = recv
+		if check.Types != nil {
+			// TODO: record here?
+		}
+
 	default:
 		unreachable()
 	}
@@ -473,6 +501,7 @@ func lookupPlyMethod(T Type, name string) (obj Object, index []int, indirect boo
 			"contains": {nil, nil, true}, // ([]T).contains(T) bool
 			"fold":     {nil, nil, true}, // ([]T).fold(func(U, T) U, U) U
 			"morph":    {nil, nil, true}, // ([]T).morph(func(T) U) []U
+			"sort":     {nil, nil, true}, // ([]T).sort(func(T, T) bool) []T
 		}
 
 	case *Map:
