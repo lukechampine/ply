@@ -25,10 +25,12 @@ type V int
 // W is a generic type.
 type W int
 
-// SliceT is a slice with element type T.
+// SliceT is a slice with element type T. This includes named types whose
+// underlying type is []T.
 type SliceT int
 
-// MapTU is a map with element type T and key type U.
+// MapTU is a map with element type T and key type U. This includes named
+// types whose underlying type is map[T]U.
 type MapTU int
 
 // Contains returns true if m contains e. It is shorthand for:
@@ -43,7 +45,7 @@ func (m MapTU) Elems() []U
 
 // Filter returns a new map containing only the key/value pairs of m that
 // satisfy pred.
-func (m MapTU) Filter(pred func(T, U) bool) map[T]U
+func (m MapTU) Filter(pred func(T, U) bool) MapTU
 
 // Keys returns the keys of m. The order of the keys is not specified.
 func (m MapTU) Keys() []T
@@ -55,11 +57,11 @@ func (m MapTU) Morph(fn func(T, U) (V, W)) map[V]W
 
 // All returns true if all elements of s satisfy pred. It returns as soon as
 // it encounters an element that does not satisfy pred.
-func (s SliceT) All(pred func(T) bool) []T
+func (s SliceT) All(pred func(T) bool) bool
 
 // Any returns true if any elements of s satisfy pred. It returns as soon as
 // it encounters an element that satisfies pred.
-func (s SliceT) Any(pred func(T) bool) []T
+func (s SliceT) Any(pred func(T) bool) bool
 
 // Contains returns true if s contains e. T must be a comparable type; see
 // https://golang.org/ref/spec#Comparison_operators
@@ -75,17 +77,17 @@ func (s SliceT) Contains(e T) bool
 //
 // Note that is s is nil, the returned slice will also be nil, whereas if s is
 // merely empty (but non-nil), the returned slice will also be non-nil.
-func (s SliceT) Drop(n int) []T
+func (s SliceT) Drop(n int) SliceT
 
 // DropWhile returns a new slice omitting the initial elements of s that
 // satisfy pred. That is, unlike Filter, the slice returned by DropWhile is
 // guaranteed to be a contiguous subset of s beginning at the first element
 // that does not satisfy pred.
-func (s SliceT) DropWhile(pred func(T) bool) []T
+func (s SliceT) DropWhile(pred func(T) bool) SliceT
 
 // Filter returns a new slice containing only the elements of s that satisfy
 // pred.
-func (s SliceT) Filter(pred func(T) bool) []T
+func (s SliceT) Filter(pred func(T) bool) SliceT
 
 // Fold returns the result of repeatedly applying fn to an initial
 // "accumulator" value and each element of s. If no initial value is provided,
@@ -112,14 +114,14 @@ func (s SliceT) Foreach(fn func(T))
 func (s SliceT) Morph(fn func(T) U) []U
 
 // Reverse returns a new slice containing the elements of s in reverse order.
-func (s SliceT) Reverse() []T
+func (s SliceT) Reverse() SliceT
 
 // Sort returns a new slice containing the elements of s in sorted order,
 // according to the less function. If less is not supplied, s must either be
 // an ordered type or implement sort.Interface. In the former case, the <
 // operator is used as the less function. See
 // https://golang.org/ref/spec#Comparison_operators
-func (s SliceT) Sort(less func(T, T) bool) []T
+func (s SliceT) Sort(less func(T, T) bool) SliceT
 
 // Take returns a slice containing the first n elements of s. The returned
 // slice shares the same underlying memory as s. If n is greater than len(s),
@@ -129,15 +131,15 @@ func (s SliceT) Sort(less func(T, T) bool) []T
 //
 // Note that is s is nil, the returned slice will also be nil, whereas if s is
 // merely empty (but non-nil), the returned slice will also be non-nil.
-func (s SliceT) Take(n int) []T
+func (s SliceT) Take(n int) SliceT
 
 // TakeWhile returns a new slice containing the initial elements of s that
 // satisfy pred. That is, unlike Filter, the slice returned by TakeWhile is
 // guaranteed to be a contiguous subset of s beginning at the first element.
-func (s SliceT) TakeWhile(pred func(T) bool) []T
+func (s SliceT) TakeWhile(pred func(T) bool) SliceT
 
 // Tee calls fn on each element of s and returns s unmodified.
-func (s SliceT) Tee(fn func(T)) []T
+func (s SliceT) Tee(fn func(T)) SliceT
 
 // ToSet returns a map containing the elements of s as keys, each mapped to
 // the empty struct.
