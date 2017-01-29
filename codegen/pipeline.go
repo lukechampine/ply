@@ -267,6 +267,13 @@ func buildPipeline(chain []*ast.CallExpr, exprTypes map[ast.Expr]types.TypeAndVa
 	haveReverse := false
 	for _, call := range chain {
 		e := call.Fun.(*ast.SelectorExpr)
+		if _, ok := exprTypes[e.X]; !ok {
+			break
+		}
+		if _, ok := exprTypes[e.X].Type.Underlying().(*types.Slice); !ok {
+			// pipelines are only supported on slices
+			break
+		}
 		methodName := e.Sel.Name
 		if hasMethod(e.X, methodName, exprTypes) {
 			// method name override
