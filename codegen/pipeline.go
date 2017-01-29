@@ -143,6 +143,7 @@ func (t *transformation) specify(call *ast.CallExpr, nargs int, exprTypes map[as
 	for i := range t.params {
 		templs = append(templs, &t.params[i])
 	}
+	typName := exprTypes[call.Fun.(*ast.SelectorExpr).X].Type.String()
 	typs := t.typeFn(call.Fun.(*ast.SelectorExpr), call.Args, exprTypes)
 	for _, templ := range templs {
 		// replace types
@@ -150,6 +151,7 @@ func (t *transformation) specify(call *ast.CallExpr, nargs int, exprTypes map[as
 			typVar := 'T' + byte(i) // T, U, V, etc.
 			*templ = strings.Replace(*templ, "#"+string(typVar), typ.String(), -1)
 		}
+		*templ = strings.Replace(*templ, "#type", typName, -1)
 		// replace args
 		for i := range call.Args {
 			*templ = strings.Replace(*templ, "#arg"+strconv.Itoa(i+1), "__plyarg_"+strconv.Itoa(i+nargs), -1)
@@ -412,10 +414,10 @@ var transformations = map[string]transformation{
 	"drop": transformation{
 		recv:   `[]#T`,
 		params: []string{`int`},
-		ret:    `[]#T`,
+		ret:    `#type`,
 
 		outline: `
-	var undropped []#T
+	var undropped #type
 	#next
 	return undropped
 `,
@@ -447,10 +449,10 @@ var transformations = map[string]transformation{
 	"dropWhile": transformation{
 		recv:   `[]#T`,
 		params: []string{`func(#T) bool`},
-		ret:    `[]#T`,
+		ret:    `#type`,
 
 		outline: `
-	var undropped []#T
+	var undropped #type
 	#next
 	return undropped
 `,
@@ -479,10 +481,10 @@ var transformations = map[string]transformation{
 	"filter": transformation{
 		recv:   `[]#T`,
 		params: []string{`func(#T) bool`},
-		ret:    `[]#T`,
+		ret:    `#type`,
 
 		outline: `
-	var filtered []#T
+	var filtered #type
 	#next
 	return filtered
 `,
@@ -608,13 +610,15 @@ var transformations = map[string]transformation{
 		},
 	},
 
+	// reverse may only be present at either the beginning xor end of a
+	// pipeline,
 	"reverse": transformation{
 		recv:   `[]#T`,
 		params: nil,
-		ret:    `[]#T`,
+		ret:    `#type`,
 
 		outline: `
-	var reversed []#T
+	var reversed #type
 	#next
 	for i, j := 0, len(reversed)-1; i < j; i, j = i+1, j-1 {
 		reversed[i], reversed[j] = reversed[j], reversed[i]
@@ -636,10 +640,10 @@ var transformations = map[string]transformation{
 	"take": transformation{
 		recv:   `[]#T`,
 		params: []string{`int`},
-		ret:    `[]#T`,
+		ret:    `#type`,
 
 		outline: `
-	var taken []#T
+	var taken #type
 	#next
 	return taken
 `,
@@ -667,10 +671,10 @@ var transformations = map[string]transformation{
 	"takeWhile": transformation{
 		recv:   `[]#T`,
 		params: []string{`func(#T) bool`},
-		ret:    `[]#T`,
+		ret:    `#type`,
 
 		outline: `
-	var taken []#T
+	var taken #type
 	#next
 	return taken
 `,
@@ -694,11 +698,11 @@ var transformations = map[string]transformation{
 	"tee": transformation{
 		recv:   `[]#T`,
 		params: []string{`func(#T)`},
-		ret:    `[]#T`,
+		ret:    `#type`,
 
 		outline: `
 	#next
-	return xs
+	return #type(xs)
 `,
 		loop: `
 	for _, x1 := range xs {

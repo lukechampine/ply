@@ -10,6 +10,8 @@ type ints []int
 
 func (ints) filter(func(x int) bool) ints { return ints{7} }
 
+type intmap map[int]int
+
 func TestMerge(t *testing.T) {
 	m := merge(map[int]int{1: 1}, map[int]int{2: 2})
 	if !reflect.DeepEqual(m, map[int]int{1: 1, 2: 2}) {
@@ -37,6 +39,12 @@ func TestFilter(t *testing.T) {
 	m = m.filter(func(u uint8, i int8) bool { return u%2 == 0 && i < 0 })
 	if !reflect.DeepEqual(m, map[uint8]int8{8: -1}) {
 		t.Error("filter failed:", m)
+	}
+
+	// named type
+	im := intmap{1:1, 2:2}.filter(func(k, v int) bool { return true })
+	if !reflect.DeepEqual(im, intmap{1:1, 2:2}) {
+		t.Error("filter failed:", im)
 	}
 }
 
@@ -129,12 +137,22 @@ func TestTakeWhile(t *testing.T) {
 	if !reflect.DeepEqual(xs, []int{2, 4}) {
 		t.Error("takeWhile failed:", xs)
 	}
+	// custom type
+	is := ints{2, 4, 5, 6}.takeWhile(func(i int) bool { return i%2 == 0 })
+	if !reflect.DeepEqual(is, ints{2, 4}) {
+		t.Error("takeWhile failed:", is)
+	}
 }
 
 func TestDropWhile(t *testing.T) {
 	xs := []int{1, 2, 3, 4, 5}.dropWhile(func(i int) bool { return i < 3 })
 	if !reflect.DeepEqual(xs, []int{3, 4, 5}) {
 		t.Error("dropWhile failed:", xs)
+	}
+	// custom type
+	is := ints{1, 2, 3, 4, 5}.dropWhile(func(i int) bool { return i < 3 })
+	if !reflect.DeepEqual(is, ints{3, 4, 5}) {
+		t.Error("dropWhile failed:", is)
 	}
 }
 
@@ -276,8 +294,13 @@ func TestPipeline(t *testing.T) {
 	if sideEffects != 3 {
 		t.Error("pipeline failed:", sideEffects)
 	}
-}
 
+	// named type
+	is := ints{1, 2, 3, 4, 5}.drop(3).reverse()
+	if !reflect.DeepEqual(is, ints{5, 4}) {
+		t.Error("pipeline failed:", is)
+	}
+}
 
 func TestTakeDrop(t *testing.T) {
 	xs := []int{1, 2, 3, 4, 5}
@@ -316,26 +339,41 @@ func TestTakeDrop(t *testing.T) {
 	if !reflect.DeepEqual(zs, []int{4}) {
 		t.Error("take/drop pipeline failed:", zs)
 	}
+
+	// custom type
+	is := ints{1, 2, 3, 4, 5}
+	if !reflect.DeepEqual(is.take(3), ints{1, 2, 3}) {
+		t.Error("take failed:", is.take(3))
+	}
+	if !reflect.DeepEqual(is.drop(3), ints{4, 5}) {
+		t.Error("drop failed:", is.drop(3))
+	}
 }
 
 func TestSort(t *testing.T) {
-	xs := []int{5,2,4,3,1}
-	if !reflect.DeepEqual(xs.sort(), []int{1,2,3,4,5}) {
+	xs := []int{5, 2, 4, 3, 1}
+	if !reflect.DeepEqual(xs.sort(), []int{1, 2, 3, 4, 5}) {
 		t.Error("sort failed:", xs.sort())
 	}
 
 	ys := xs.sort().take(2)
-	if !reflect.DeepEqual(ys, []int{1,2}) {
+	if !reflect.DeepEqual(ys, []int{1, 2}) {
 		t.Error("sort failed:", ys)
 	}
 	zs := xs.take(2).sort()
-	if !reflect.DeepEqual(zs, []int{2,5}) {
+	if !reflect.DeepEqual(zs, []int{2, 5}) {
 		t.Error("sort failed:", zs)
 	}
 
 	// custom sort function
 	descending := func(x, y int) bool { return x > y }
-	if !reflect.DeepEqual(xs.sort(descending), []int{5,4,3,2,1}) {
+	if !reflect.DeepEqual(xs.sort(descending), []int{5, 4, 3, 2, 1}) {
 		t.Error("sort failed:", xs.sort(descending))
+	}
+
+	// custom type
+	is := ints{5, 2, 4, 3, 1}
+	if !reflect.DeepEqual(is.sort(), ints{1, 2, 3, 4, 5}) {
+		t.Error("sort failed:", is.sort())
 	}
 }
