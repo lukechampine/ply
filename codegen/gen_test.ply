@@ -10,8 +10,6 @@ type ints []int
 
 func (ints) filter(func(x int) bool) ints { return ints{7} }
 
-type intmap map[int]int
-
 func TestMerge(t *testing.T) {
 	m := merge(map[int]int{1: 1}, map[int]int{2: 2})
 	if !reflect.DeepEqual(m, map[int]int{1: 1, 2: 2}) {
@@ -42,6 +40,7 @@ func TestFilter(t *testing.T) {
 	}
 
 	// named type
+	type intmap map[int]int
 	im := intmap{1:1, 2:2}.filter(func(k, v int) bool { return true })
 	if !reflect.DeepEqual(im, intmap{1:1, 2:2}) {
 		t.Error("filter failed:", im)

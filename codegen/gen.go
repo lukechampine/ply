@@ -75,9 +75,8 @@ var safeTypeName = func() func(string) string {
 	}
 }()
 
-func specify(templ, name, typ string, typs ...types.Type) string {
+func specify(templ, name string, typs ...types.Type) string {
 	code := strings.Replace(templ, "#name", name, -1)
-	code = strings.Replace(code, "#type", typ, -1)
 	for i, t := range typs {
 		typVar := 'T' + byte(i) // T, U, V, etc.
 		code = strings.Replace(code, "#"+string(typVar), t.String(), -1)
@@ -87,14 +86,14 @@ func specify(templ, name, typ string, typs ...types.Type) string {
 
 func genFunc(templ, fnname string, typs ...types.Type) (name, code string, r rewriter) {
 	name = safeFnName(fnname)
-	code = specify(templ, name, "", typs...) // no funcs need named types -- yet
+	code = specify(templ, name, typs...)
 	r = rewriteFunc(name)
 	return
 }
 
-func genMethod(templ, methodname, typename string, typs ...types.Type) (name, code string, r rewriter) {
+func genMethod(templ, methodname string, typs ...types.Type) (name, code string, r rewriter) {
 	name = safeTypeName(methodname)
-	code = specify(templ, name, typename, typs...)
+	code = specify(templ, name, typs...)
 	r = rewriteMethod(name)
 	return
 }
@@ -102,9 +101,8 @@ func genMethod(templ, methodname, typename string, typs ...types.Type) (name, co
 // for slice methods that just need T
 func genSliceMethod(templ, methodname string) func(fn *ast.SelectorExpr, args []ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
 	return func(fn *ast.SelectorExpr, args []ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
-		typ := exprTypes[fn.X].Type.String()
 		T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem()
-		return genMethod(templ, methodname, typ, T)
+		return genMethod(templ, methodname, T)
 	}
 }
 
@@ -275,12 +273,12 @@ func containsGen(fn *ast.SelectorExpr, args []ast.Expr, exprTypes map[ast.Expr]t
 		if T := typ.Elem(); !types.Comparable(T) {
 			// if type is not comparable, then the argument must be nil
 			// (otherwise type-check would have failed)
-			return genMethod(containsSliceNilTempl, "contains_slice_nil", "", T)
+			return genMethod(containsSliceNilTempl, "contains_slice_nil", T)
 		} else {
-			return genMethod(containsSliceTempl, "contains_slice", "", T)
+			return genMethod(containsSliceTempl, "contains_slice", T)
 		}
 	case *types.Map:
-		return genMethod(containsMapTempl, "contains_map", "", typ.Key(), typ.Elem())
+		return genMethod(containsMapTempl, "contains_map", typ.Key(), typ.Elem())
 	}
 	return
 }
@@ -288,25 +286,25 @@ func containsGen(fn *ast.SelectorExpr, args []ast.Expr, exprTypes map[ast.Expr]t
 const dropTempl = `
 type #name []#T
 
-func (xs #name) drop(n int) #type {
+func (xs #name) drop(n int) []#T {
 	if n > len(xs) {
 		n = len(xs)
 	}
-	return #type(xs[n:])
+	return xs[n:]
 }
 `
 
 const dropWhileTempl = `
 type #name []#T
 
-func (xs #name) dropWhile(pred func(#T) bool) #type {
+func (xs #name) dropWhile(pred func(#T) bool) []#T {
 	var i int
 	for i = range xs {
 		if !pred(xs[i]) {
 			break
 		}
 	}
-	return append(#type(nil), xs[i:]...)
+	return append([]#T(nil), xs[i:]...)
 }
 `
 
@@ -324,14 +322,14 @@ func (m #name) elems() []#U {
 
 func elemsGen(fn *ast.SelectorExpr, args []ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
 	mt := exprTypes[fn.X].Type.Underlying().(*types.Map)
-	return genMethod(elemsTempl, "elems_map", "", mt.Key(), mt.Elem())
+	return genMethod(elemsTempl, "elems_map", mt.Key(), mt.Elem())
 }
 
 const filterTempl = `
 type #name []#T
 
-func (xs #name) filter(pred func(#T) bool) #type {
-	var filtered #type
+func (xs #name) filter(pred func(#T) bool) []#T {
+	var filtered []#T
 	for _, x := range xs {
 		if pred(x) {
 			filtered = append(filtered, x)
@@ -344,11 +342,11 @@ func (xs #name) filter(pred func(#T) bool) #type {
 const filterMapTempl = `
 type #name map[#T]#U
 
-func (m #name) filter(pred func(#T, #U) bool) #type {
+func (m #name) filter(pred func(#T, #U) bool) map[#T]#U {
 	if m == nil {
 		return nil
 	}
-	filtered := make(#type)
+	filtered := make(map[#T]#U)
 	for k, e := range m {
 		if pred(k, e) {
 			filtered[k] = e
@@ -359,12 +357,11 @@ func (m #name) filter(pred func(#T, #U) bool) #type {
 `
 
 func filterGen(fn *ast.SelectorExpr, args []ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
-	typName := exprTypes[fn.X].Type.String()
 	switch typ := exprTypes[fn.X].Type.Underlying().(type) {
 	case *types.Slice:
-		return genMethod(filterTempl, "filter_slice", typName, typ.Elem())
+		return genMethod(filterTempl, "filter_slice", typ.Elem())
 	case *types.Map:
-		return genMethod(filterMapTempl, "filter_map", typName, typ.Key(), typ.Elem())
+		return genMethod(filterMapTempl, "filter_map", typ.Key(), typ.Elem())
 	}
 	return
 }
@@ -401,9 +398,9 @@ func foldGen(fn *ast.SelectorExpr, args []ast.Expr, exprTypes map[ast.Expr]types
 	T := sig.Params().At(1).Type()
 	U := sig.Params().At(0).Type()
 	if len(args) == 1 {
-		return genMethod(fold1Templ, "fold1_slice", "", T, U)
+		return genMethod(fold1Templ, "fold1_slice", T, U)
 	} else if len(args) == 2 {
-		return genMethod(foldTempl, "fold_slice", "", T, U)
+		return genMethod(foldTempl, "fold_slice", T, U)
 	}
 	return
 }
@@ -432,7 +429,7 @@ func (m #name) keys() []#T {
 
 func keysGen(fn *ast.SelectorExpr, args []ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
 	mt := exprTypes[fn.X].Type.Underlying().(*types.Map)
-	return genMethod(keysTempl, "keys_map", "", mt.Key(), mt.Elem())
+	return genMethod(keysTempl, "keys_map", mt.Key(), mt.Elem())
 }
 
 const morphTempl = `
@@ -469,13 +466,13 @@ func morphGen(fn *ast.SelectorExpr, args []ast.Expr, exprTypes map[ast.Expr]type
 	case *types.Slice:
 		T := sig.Params().At(0).Type()
 		U := sig.Results().At(0).Type()
-		return genMethod(morphTempl, "morph_slice", "", T, U)
+		return genMethod(morphTempl, "morph_slice", T, U)
 	case *types.Map:
 		T := sig.Params().At(0).Type()
 		U := sig.Params().At(1).Type()
 		V := sig.Results().At(0).Type()
 		W := sig.Results().At(1).Type()
-		return genMethod(morphMapTempl, "morph_map", "", T, U, V, W)
+		return genMethod(morphMapTempl, "morph_map", T, U, V, W)
 	}
 	return
 }
@@ -483,8 +480,8 @@ func morphGen(fn *ast.SelectorExpr, args []ast.Expr, exprTypes map[ast.Expr]type
 const reverseTempl = `
 type #name []#T
 
-func (xs #name) reverse() #type {
-	reversed := make(#type, len(xs))
+func (xs #name) reverse() []#T {
+	reversed := make([]#T, len(xs))
 	for i := range xs {
 		reversed[i] = xs[len(xs)-1-i]
 	}
@@ -498,8 +495,8 @@ func (xs #name) Len() int           { return len(xs) }
 func (xs #name) Swap(i, j int)      { xs[i], xs[j] = xs[j], xs[i] }
 func (xs #name) Less(i, j int) bool { return xs[i] < xs[j] }
 
-func (xs #name) sort() #type {
-	s := make(#type, len(xs))
+func (xs #name) sort() []#T {
+	s := make([]#T, len(xs))
 	copy(s, xs)
 	sort.Sort(#name(s))
 	return s
@@ -510,7 +507,7 @@ const sortByTempl = `
 type #name []#T
 
 type #namesorter struct {
-	data #type
+	data []#T
 	less func(#T, #T) bool
 }
 
@@ -518,8 +515,8 @@ func (xs #namesorter) Len() int { return len(xs.data) }
 func (xs #namesorter) Swap(i, j int) { xs.data[i], xs.data[j] = xs.data[j], xs.data[i] }
 func (xs #namesorter) Less(i, j int) bool { return xs.less(xs.data[i], xs.data[j]) }
 
-func (xs #name) sort(less func(#T, #T) bool) #type {
-	s := #namesorter{make(#type, len(xs)), less}
+func (xs #name) sort(less func(#T, #T) bool) []#T {
+	s := #namesorter{make([]#T, len(xs)), less}
 	copy(s.data, xs)
 	sort.Sort(s)
 	return s.data
@@ -528,12 +525,11 @@ func (xs #name) sort(less func(#T, #T) bool) #type {
 
 func sortGen(fn *ast.SelectorExpr, args []ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
 	// determine arg types
-	typName := exprTypes[fn.X].Type.String()
 	T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem()
 	if len(args) == 0 {
-		return genMethod(sortTempl, "sort_slice", typName, T)
+		return genMethod(sortTempl, "sort_slice", T)
 	} else if len(args) == 1 {
-		return genMethod(sortByTempl, "sortBy_slice", typName, T)
+		return genMethod(sortByTempl, "sortBy_slice", T)
 	}
 	return
 }
@@ -541,32 +537,32 @@ func sortGen(fn *ast.SelectorExpr, args []ast.Expr, exprTypes map[ast.Expr]types
 const takeTempl = `
 type #name []#T
 
-func (xs #name) take(n int) #type {
+func (xs #name) take(n int) []#T {
 	if n > len(xs) {
 		n = len(xs)
 	}
-	return #type(xs[:n])
+	return xs[:n]
 }
 `
 
 const takeWhileTempl = `
 type #name []#T
 
-func (xs #name) takeWhile(pred func(#T) bool) #type {
+func (xs #name) takeWhile(pred func(#T) bool) []#T {
 	var i int
 	for i = range xs {
 		if !pred(xs[i]) {
 			break
 		}
 	}
-	return append(#type(nil), xs[:i]...)
+	return append([]#T(nil), xs[:i]...)
 }
 `
 
 const teeTempl = `
 type #name []#T
 
-func (xs #name) tee(fn func(#T)) #type {
+func (xs #name) tee(fn func(#T)) []#T {
 	for _, x := range xs {
 		fn(x)
 	}

@@ -55,6 +55,7 @@ func (s specializer) addDecl(filename, code string) {
 func (s specializer) Rewrite(node ast.Node) (ast.Node, gorewrite.Rewriter) {
 	switch n := node.(type) {
 	case *ast.CallExpr:
+		var rewrote bool
 		switch fn := n.Fun.(type) {
 		case *ast.Ident:
 			if gen, ok := funcGenerators[fn.Name]; ok {
@@ -67,6 +68,7 @@ func (s specializer) Rewrite(node ast.Node) (ast.Node, gorewrite.Rewriter) {
 					name, code, rewrite := gen(fn, n.Args, s.types)
 					s.addDecl(name, code)
 					node = rewrite(n)
+					rewrote = true
 				}
 			}
 
@@ -85,6 +87,7 @@ func (s specializer) Rewrite(node ast.Node) (ast.Node, gorewrite.Rewriter) {
 				name, code, rewrite := p.gen()
 				s.addDecl(name, code)
 				node = rewrite(n)
+				rewrote = true
 			} else if gen, ok := methodGenerators[fn.Sel.Name]; ok && !hasMethod(fn.X, fn.Sel.Name, s.types) {
 				name, code, rewrite := gen(fn, n.Args, s.types)
 				s.addDecl(name, code)
@@ -92,6 +95,16 @@ func (s specializer) Rewrite(node ast.Node) (ast.Node, gorewrite.Rewriter) {
 				if fn.Sel.Name == "sort" {
 					s.imports["sort"] = struct{}{}
 				}
+				rewrote = true
+			}
+		}
+		if named, ok := s.types[n].Type.(*types.Named); ok && rewrote {
+			// if we rewrote a callsite that returns a named type, cast the
+			// expression to the named type directly to prevent the incorrect
+			// type from being inferred
+			node = &ast.CallExpr{
+				Fun:  ast.NewIdent(named.String()),
+				Args: []ast.Expr{node.(ast.Expr)},
 			}
 		}
 	}
