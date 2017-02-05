@@ -9,13 +9,13 @@ package codegen
 // into this:
 //
 //    var filtered []int
-//    for _, x1 := range xs {
-//        if !even(x1) {
+//    for _, e1 := range xs {
+//        if !even(e1) {
 //            break
 //        }
-//        x2 := square(x1)
-//        if lessThan100(x2) {
-//            filtered = append(filtered, x2)
+//        e2 := square(e1)
+//        if lessThan100(e2) {
+//            filtered = append(filtered, e2)
 //        }
 //    }
 //    return filtered
@@ -41,29 +41,29 @@ package codegen
 // value loop over xs:
 //
 //    var filtered []int
-//    for _, x1 := range xs {
+//    for _, #e := range xs {
 //        #next
 //    }
 //    return filtered
 //
 // We then insert the "op" section of each transformation, moving from first
-// to last. Each op references the loop variable #x, and may transform it into
-// a new variable #y. When wiring the ops together, #x is replaced with the
-// current loop variable, and #y increments the current loop variable. Thus,
+// to last. Each op references the loop variable #e, and may transform it into
+// a new variable #e. When wiring the ops together, #e is replaced with the
+// current loop variable, and #+e increments the current loop variable. Thus,
 // the ops in the example look like this:
 //
 //    // takeWhile
-//    if !even(#x) { // #x -> x1
+//    if !even(#e) { // #e -> e1
 //        break
 //    }
 //    #next
 //
 //    // morph
-//    #y := square(#x) // #x -> x1, #y -> x2
+//    #+e := square(#e) // #e -> e1, #+e -> e2
 //    #next
 //
 //    // filter
-//    if !lessThan100(#x) { // #x -> x2
+//    if !lessThan100(#e) { // #e -> e2
 //        continue
 //    }
 //    #next
@@ -73,20 +73,20 @@ package codegen
 // transformation (filter). This is the section that interacts with the
 // outline in order to produce the final return value:
 //
-//    filtered = append(filtered, #x)
+//    filtered = append(filtered, #e)
 //
 // Yielding the finished pipeline:
 //
 //    var filtered []int
-//    for _, x1 := range xs {
-//        if !even(x1) {
+//    for _, e1 := range xs {
+//        if !even(e1) {
 //            break
 //        }
-//        x2 := square(x1)
-//        if !lessThan100(x2) {
+//        e2 := square(e1)
+//        if !lessThan100(e2) {
 //            continue
 //        }
-//        filtered = append(filtered, x2)
+//        filtered = append(filtered, e2)
 //    }
 //    return filtered
 //
@@ -94,7 +94,7 @@ package codegen
 // with a single call that combines the arguments to each of the calls. In our
 // example:
 //
-//    __plypipe(xs).pipe(even, square, lessThan100)
+//    __plypipe(xs).pipeline(even, square, lessThan100)
 //
 // And we are done.
 
@@ -173,13 +173,14 @@ var safePipeName = func() func() string {
 }()
 
 type pipeline struct {
-	xn  int // x1, x2, x3...
+	kn  int // k1, k2, k3...
+	en  int // e1, e2, e3...
 	fns []*ast.CallExpr
 	ts  []transformation
 }
 
 // addSector replaces the #next directive in outer with inner. It also sets
-// the value of #x and #y variable directives.
+// the value of #k and #e variable directives.
 func (p *pipeline) addSector(outer, inner string) string {
 	if inner == "" {
 		return outer // same result as setting inner = "#next"
@@ -187,14 +188,22 @@ func (p *pipeline) addSector(outer, inner string) string {
 	// insert inner at #next directive of outer
 	code := strings.Replace(outer, "#next", inner, 1)
 
-	// replace #x with current ident
-	code = strings.Replace(code, "#x", "x"+strconv.Itoa(p.xn), -1)
+	// replace #e ("element var") with current ident
+	code = strings.Replace(code, "#e", "e"+strconv.Itoa(p.en), -1)
 
-	// if #y is present, increment current ident and replace it
-	if strings.Contains(code, "#y") {
-		p.xn++
-		code = strings.Replace(code, "#y", "x"+strconv.Itoa(p.xn), -1)
+	// if #e2 is present, increment current ident and replace it
+	if strings.Contains(code, "#+e") {
+		p.en++
+		code = strings.Replace(code, "#+e", "e"+strconv.Itoa(p.en), -1)
 	}
+
+	// ditto for #k ("key var")
+	code = strings.Replace(code, "#k", "k"+strconv.Itoa(p.kn), -1)
+	if strings.Contains(code, "#+k") {
+		p.kn++
+		code = strings.Replace(code, "#+k", "k"+strconv.Itoa(p.en), -1)
+	}
+
 	return code
 }
 
@@ -235,7 +244,7 @@ func (p *pipeline) gen() (name, code string, r rewriter) {
 	).Replace(`
 type #name #T
 
-func (xs #name) pipeline(#params) #ret {
+func (recv #name) pipeline(#params) #ret {
 	#body
 }
 `)
@@ -263,7 +272,7 @@ func (xs #name) pipeline(#params) #ret {
 }
 
 func buildPipeline(chain []*ast.CallExpr, exprTypes map[ast.Expr]types.TypeAndValue) *pipeline {
-	p := &pipeline{xn: 1}
+	p := &pipeline{kn: 1, en: 1}
 
 	// iterate through chain, which will be in reverse order. Lookup the
 	// transformation corresponding to each call in the chain. Stop if no
@@ -353,12 +362,12 @@ var transformations = map[string]transformation{
 	return true
 `,
 		loop: `
-	for _, x1 := range xs {
+	for _, #e := range recv {
 		#next
 	}
 `,
 		cons: `
-		if !#arg1(#x) {
+		if !#arg1(#e) {
 			return false
 		}
 `,
@@ -375,12 +384,12 @@ var transformations = map[string]transformation{
 	return false
 `,
 		loop: `
-	for _, x1 := range xs {
+	for _, #e := range recv {
 		#next
 	}
 `,
 		cons: `
-		if #arg1(#x) {
+		if #arg1(#e) {
 			return true
 		}
 `,
@@ -397,12 +406,12 @@ var transformations = map[string]transformation{
 	return false
 `,
 		loop: `
-	for _, x1 := range xs {
+	for _, #e := range recv {
 		#next
 	}
 `,
 		cons: `
-		if #x == #arg1 {
+		if #e == #arg1 {
 			return true
 		}
 `,
@@ -419,12 +428,12 @@ var transformations = map[string]transformation{
 	return false
 `,
 		loop: `
-	for _, x1 := range xs {
+	for _, #e := range recv {
 		#next
 	}
 `,
 		cons: `
-		if #x == nil {
+		if #e == nil {
 			return true
 		}
 `,
@@ -446,11 +455,11 @@ var transformations = map[string]transformation{
 	#next
 `,
 		loop: `
-	if #arg1 > len(xs) {
-		#arg1 = len(xs)
+	if #arg1 > len(recv) {
+		#arg1 = len(recv)
 	}
 	ndropped#arg1 = #arg1
-	for _, x1 := range xs[#arg1:] {
+	for _, #e := range recv[#arg1:] {
 		#next
 	}
 `,
@@ -461,7 +470,7 @@ var transformations = map[string]transformation{
 		#next
 `,
 		cons: `
-		undropped = append(undropped, #x)
+		undropped = append(undropped, #e)
 `,
 		typeFn: justSliceElem,
 	},
@@ -481,19 +490,19 @@ var transformations = map[string]transformation{
 	#next
 `,
 		loop: `
-	for _, x1 := range xs {
+	for _, #e := range recv {
 		#next
 	}
 `,
 		op: `
-		stilldropping#arg1 = stilldropping#arg1 && #arg1(#x)
+		stilldropping#arg1 = stilldropping#arg1 && #arg1(#e)
 		if stilldropping#arg1 {
 			continue
 		}
 		#next
 `,
 		cons: `
-		undropped = append(undropped, #x)
+		undropped = append(undropped, #e)
 `,
 		typeFn: justSliceElem,
 	},
@@ -509,18 +518,18 @@ var transformations = map[string]transformation{
 	return filtered
 `,
 		loop: `
-	for _, x1 := range xs {
+	for _, #e := range recv {
 		#next
 	}
 `,
 		op: `
-		if !#arg1(#x) {
+		if !#arg1(#e) {
 			continue
 		}
 		#next
 `,
 		cons: `
-		filtered = append(filtered, #x)
+		filtered = append(filtered, #e)
 `,
 		typeFn: justSliceElem,
 	},
@@ -536,12 +545,12 @@ var transformations = map[string]transformation{
 	return acc
 `,
 		loop: `
-	for _, x1 := range xs {
+	for _, #e := range recv {
 		#next
 	}
 `,
 		cons: `
-		acc = #arg1(acc, #x)
+		acc = #arg1(acc, #e)
 `,
 		typeFn: func(fn *ast.SelectorExpr, args []ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) []types.Type {
 			sig := exprTypes[args[0]].Type.(*types.Signature)
@@ -566,16 +575,16 @@ var transformations = map[string]transformation{
 	return acc
 `,
 		loop: `
-	for _, x1 := range xs {
+	for _, #e := range recv {
 		#next
 	}
 `,
 		cons: `
 		if !accset {
-			acc = #x
+			acc = #e
 			accset = true
 		} else {
-			acc = #arg1(acc, #x)
+			acc = #arg1(acc, #e)
 		}
 `,
 		typeFn: justSliceElem,
@@ -590,12 +599,12 @@ var transformations = map[string]transformation{
 	#next
 `,
 		loop: `
-	for _, x1 := range xs {
+	for _, #e := range recv {
 		#next
 	}
 `,
 		cons: `
-		#arg1(#x)
+		#arg1(#e)
 `,
 		typeFn: justSliceElem,
 	},
@@ -611,16 +620,16 @@ var transformations = map[string]transformation{
 	return morphed
 `,
 		loop: `
-	for _, x1 := range xs {
+	for _, #e := range recv {
 		#next
 	}
 `,
 		op: `
-		#y := #arg1(#x)
+		#+e := #arg1(#e)
 		#next
 `,
 		cons: `
-		morphed = append(morphed, #x)
+		morphed = append(morphed, #e)
 `,
 		typeFn: func(fn *ast.SelectorExpr, args []ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) []types.Type {
 			sig := exprTypes[args[0]].Type.Underlying().(*types.Signature)
@@ -644,13 +653,13 @@ var transformations = map[string]transformation{
 	return reversed
 `,
 		loop: `
-	for i := range xs {
-		x1 := xs[len(xs)-i-1]
+	for i := range recv {
+		#e := recv[len(recv)-i-1]
 		#next
 	}
 `,
 		cons: `
-		reversed = append(reversed, #x)
+		reversed = append(reversed, #e)
 `,
 		typeFn: justSliceElem,
 	},
@@ -670,7 +679,7 @@ var transformations = map[string]transformation{
 	#next
 `,
 		loop: `
-	for _, x1 := range xs {
+	for _, #e := range recv {
 		#next
 	}
 `,
@@ -681,7 +690,7 @@ var transformations = map[string]transformation{
 		#next
 `,
 		cons: `
-		taken = append(taken, #x)
+		taken = append(taken, #e)
 `,
 		typeFn: justSliceElem,
 	},
@@ -697,18 +706,18 @@ var transformations = map[string]transformation{
 	return taken
 `,
 		loop: `
-	for _, x1 := range xs {
+	for _, #e := range recv {
 		#next
 	}
 `,
 		op: `
-		if !arg1(#x) {
+		if !arg1(#e) {
 			break
 		}
 		#next
 `,
 		cons: `
-		taken = append(taken, #x)
+		taken = append(taken, #e)
 `,
 		typeFn: justSliceElem,
 	},
@@ -720,15 +729,15 @@ var transformations = map[string]transformation{
 
 		outline: `
 	#next
-	return xs
+	return recv
 `,
 		loop: `
-	for _, x1 := range xs {
+	for _, #e := range recv {
 		#next
 	}
 `,
 		op: `
-		#arg1(#x)
+		#arg1(#e)
 		#next
 `,
 		typeFn: justSliceElem,
@@ -745,12 +754,12 @@ var transformations = map[string]transformation{
 	return set
 `,
 		loop: `
-	for _, x1 := range xs {
+	for _, #e := range recv {
 		#next
 	}
 `,
 		cons: `
-		set[x] = struct{}{}
+		set[#e] = struct{}{}
 `,
 		typeFn: justSliceElem,
 	},
@@ -768,12 +777,12 @@ var transformations = map[string]transformation{
 	return elems
 `,
 		loop: `
-	for _, x1 := range xs {
+	for _, #e := range recv {
 		#next
 	}
 `,
 		cons: `
-		elems = append(elems, #x)
+		elems = append(elems, #e)
 `,
 		typeFn: justMapKeyElem,
 	},
@@ -788,13 +797,15 @@ var transformations = map[string]transformation{
 	#next
 	return keys
 `,
+		// special case: store map key in #e because other transformations expect
+		// to operate on #e
 		loop: `
-	for x1 := range xs {
+	for #e := range recv {
 		#next
 	}
 `,
 		cons: `
-		keys = append(keys, #x)
+		keys = append(keys, #e)
 `,
 		typeFn: justMapKeyElem,
 	},

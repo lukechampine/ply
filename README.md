@@ -164,11 +164,15 @@ will be the same. Ply can't perform this reordering automatically though:
 methods may have side effects that the programmer is relying upon.
 
 Side effects are also problematic because pipelining can change the number of
-times a function is called. For example, if the `morph` in the above example
-had a side effect, it would only occur three times instead of six. So the best
-practice is to avoid side effects in functions passed to `morph`, `filter`,
-etc. Instead, perform side effects in `foreach` and `tee`, which are designed
-with side effects in mind.
+times a function is called. For example, in this expression:
+
+```go
+[]int{1, 2, 3, 4, 6, 20}.morph(fn).take(3)
+```
+
+Without pipelining, `fn` is called on every element of the slice. But with
+pipelining, it is only called 3 times. So the best practice is to avoid side
+effects in functions passed to `morph`, `filter`, etc.
 
 Lastly, it's worth pointing out that pipelining cannot eliminate any
 allocations performed inside function arguments. For example, in this chain:
