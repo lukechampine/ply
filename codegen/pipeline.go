@@ -787,6 +787,33 @@ var transformations = map[string]transformation{
 		typeFn: justMapKeyElem,
 	},
 
+	"filter_map": transformation{
+		recv:   `map[#T]#U`,
+		params: []string{`func(#T, #U) bool`},
+		ret:    `map[#T]#U`,
+
+		outline: `
+	filtered := make(map[#T]#U)
+	#next
+	return filtered
+`,
+		loop: `
+	for #k, #e := range recv {
+		#next
+	}
+`,
+		op: `
+		if !#arg1(#k, #e) {
+			continue
+		}
+		#next
+`,
+		cons: `
+		filtered[#k] = #e
+`,
+		typeFn: justMapKeyElem,
+	},
+
 	"keys_map": transformation{
 		recv:   `map[#T]#U`,
 		params: nil,
@@ -808,6 +835,38 @@ var transformations = map[string]transformation{
 		keys = append(keys, #e)
 `,
 		typeFn: justMapKeyElem,
+	},
+
+	"morph_map": transformation{
+		recv:   `map[#T]#U`,
+		params: []string{`func(#T, #U) (#V, #W)`},
+		ret:    `map[#V]#W`,
+
+		outline: `
+	morphed := make(map[#V]#W)
+	#next
+	return morphed
+`,
+		loop: `
+	for #k, #e := range recv {
+		#next
+	}
+`,
+		op: `
+		#+k, #+e := #arg1(#k, #e)
+		#next
+`,
+		cons: `
+		morphed[#k] = #e
+`,
+		typeFn: func(fn *ast.SelectorExpr, args []ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) []types.Type {
+			sig := exprTypes[args[0]].Type.Underlying().(*types.Signature)
+			T := sig.Params().At(0).Type()
+			U := sig.Params().At(1).Type()
+			V := sig.Results().At(0).Type()
+			W := sig.Results().At(1).Type()
+			return []types.Type{T, U, V, W}
+		},
 	},
 }
 

@@ -308,6 +308,12 @@ func TestPipeline(t *testing.T) {
 		t.Error("pipeline failed:", me)
 	}
 
+	mdouble := func(k, v int) (int, int) { return k*2, v*2 }
+	dm := m.morph(mdouble).morph(mdouble)
+	if !reflect.DeepEqual(dm, map[int]int{4:4, 8:8}) {
+		t.Error("pipeline failed:", dm)
+	}
+
 	evenKeys := m.keys().filter(even)
 	if !reflect.DeepEqual(evenKeys, []int{2}) {
 		t.Error("pipeline failed:", evenKeys)
