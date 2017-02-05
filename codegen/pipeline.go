@@ -138,12 +138,16 @@ type transformation struct {
 	typeFn func(*ast.SelectorExpr, []ast.Expr, map[ast.Expr]types.TypeAndValue) []types.Type
 }
 
-func (t *transformation) specify(call *ast.CallExpr, nargs int, exprTypes map[ast.Expr]types.TypeAndValue) {
-	templs := []*string{&t.recv, &t.ret, &t.outline, &t.setup, &t.loop, &t.op, &t.cons}
-	for i := range t.params {
-		templs = append(templs, &t.params[i])
+func (t transformation) specify(call *ast.CallExpr, nargs int, exprTypes map[ast.Expr]types.TypeAndValue) transformation {
+	// make a copy of t
+	s := t
+	s.params = append([]string(nil), t.params...)
+
+	templs := []*string{&s.recv, &s.ret, &s.outline, &s.setup, &s.loop, &s.op, &s.cons}
+	for i := range s.params {
+		templs = append(templs, &s.params[i])
 	}
-	typs := t.typeFn(call.Fun.(*ast.SelectorExpr), call.Args, exprTypes)
+	typs := s.typeFn(call.Fun.(*ast.SelectorExpr), call.Args, exprTypes)
 	for _, templ := range templs {
 		// replace types
 		for i, typ := range typs {
@@ -157,6 +161,7 @@ func (t *transformation) specify(call *ast.CallExpr, nargs int, exprTypes map[as
 		// trim whitespace
 		*templ = strings.TrimSpace(*templ)
 	}
+	return s
 }
 
 var safePipeName = func() func() string {
@@ -320,7 +325,7 @@ func buildPipeline(chain []*ast.CallExpr, exprTypes map[ast.Expr]types.TypeAndVa
 	// because order matters)
 	nargs := 0
 	for i := range p.ts {
-		p.ts[i].specify(p.fns[i], nargs, exprTypes)
+		p.ts[i] = p.ts[i].specify(p.fns[i], nargs, exprTypes)
 		nargs += len(p.fns[i].Args)
 	}
 
