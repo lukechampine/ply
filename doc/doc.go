@@ -145,6 +145,10 @@ func (s SliceT) Tee(fn func(T)) SliceT
 // the empty struct.
 func (s SliceT) ToSet() map[T]struct{}
 
+// Uniq returns a new slice containing the unique elements of s. The order of
+// elements is preserved.
+func (s SliceT) Uniq() SliceT
+
 // Max returns the larger of x or y, as determined by the > operator. T must
 // be an ordered type; see https://golang.org/ref/spec#Comparison_operators
 //

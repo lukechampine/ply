@@ -764,6 +764,42 @@ var transformations = map[string]transformation{
 		typeFn: justSliceElem,
 	},
 
+	"uniq_slice": transformation{
+		recv:   `[]#T`,
+		params: nil,
+		ret:    `[]#T`,
+
+		outline: `
+	var unique []#T
+	#next
+	return unique
+`,
+
+		setup: `
+	uniqSet := make(map[#T]struct{})
+	#next
+`,
+
+		loop: `
+	for _, #e := range recv {
+		#next
+	}
+`,
+
+		op: `
+		if _, ok := uniqSet[#e]; ok {
+			continue
+		}
+		uniqSet[#e] = struct{}{}
+		#next
+`,
+
+		cons: `
+		unique = append(unique, #e)
+`,
+		typeFn: justSliceElem,
+	},
+
 	// Map methods
 
 	"elems_map": transformation{

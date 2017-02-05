@@ -83,9 +83,9 @@ Supported Functions and Methods
 
 **Methods:** `all`, `any`, `contains`, `drop`, `dropWhile`, `elems`, `filter`,
 `fold`, `foreach`, `keys`, `morph`, `reverse`, `sort`, `take`, `takeWhile`,
-`tee`, `toSet`
+`tee`, `toSet`, `uniq`
 
-- Planned: `join`, `replace`, `split`, `uniq`
+- Planned: `join`, `replace`, `split`
 
 All functions and methods are documented in the [`ply` pseudo-package](https://godoc.org/github.com/lukechampine/ply/doc).
 

@@ -496,6 +496,7 @@ func lookupPlyMethod(T Type, name string) (obj Object, index []int, indirect boo
 			"takeWhile": {[]Type{pred}, T, false},              // ([]T).takeWhile(func(T) bool) []T
 			"tee":       {[]Type{side}, T, false},              // ([]T).tee(func(T)) []T
 			"toSet":     {nil, NewMap(t.Elem(), empty), false}, // ([]T).toSet() map[T]struct{}
+			"uniq":      {nil, T, false},                       // ([]T).uniq() []T
 
 			// special methods
 			"contains": {nil, nil, true}, // ([]T).contains(T) bool

@@ -57,6 +57,7 @@ var methodGenerators = map[string]func(*ast.SelectorExpr, []ast.Expr, map[ast.Ex
 	"takeWhile": genSliceMethod(takeWhileTempl, "takeWhile_slice"),
 	"tee":       genSliceMethod(teeTempl, "tee_slice"),
 	"toSet":     genSliceMethod(toSetTempl, "toSet_slice"),
+	"uniq":      genSliceMethod(uniqTempl, "uniq_slice"),
 }
 
 var safeFnName = func() func(string) string {
@@ -579,5 +580,21 @@ func (xs #name) toSet() map[#T]struct{} {
 		set[x] = struct{}{}
 	}
 	return set
+}
+`
+
+const uniqTempl = `
+type #name []#T
+
+func (xs #name) uniq() []#T {
+	set := make(map[#T]struct{})
+	var unique []#T
+	for _, x := range xs {
+		if _, ok := set[x]; !ok {
+			unique = append(unique, x)
+			set[x] = struct{}{}
+		}
+	}
+	return unique
 }
 `
