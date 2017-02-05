@@ -275,17 +275,25 @@ func buildPipeline(chain []*ast.CallExpr, exprTypes map[ast.Expr]types.TypeAndVa
 		if _, ok := exprTypes[e.X]; !ok {
 			break
 		}
-		if _, ok := exprTypes[e.X].Type.Underlying().(*types.Slice); !ok {
-			// pipelines are only supported on slices
+		_, isSlice := exprTypes[e.X].Type.Underlying().(*types.Slice)
+		_, isMap := exprTypes[e.X].Type.Underlying().(*types.Map)
+		if !(isSlice || isMap) {
+			// pipelines are only supported on slices and maps
 			break
 		}
 		methodName := e.Sel.Name
+		if isSlice {
+			methodName += "_slice"
+		} else if isMap {
+			methodName += "_map"
+		}
+
 		if hasMethod(e.X, methodName, exprTypes) {
 			// method name override
 			break
 		}
-		if methodName == "fold" && len(call.Args) == 1 {
-			methodName = "fold1"
+		if methodName == "fold_slice" && len(call.Args) == 1 {
+			methodName = "fold1_slice"
 		}
 
 		// lookup the transformation
@@ -299,7 +307,7 @@ func buildPipeline(chain []*ast.CallExpr, exprTypes map[ast.Expr]types.TypeAndVa
 
 		// only one reverse is allowed per pipeline, and it must be at either
 		// the beginning or the end
-		if methodName == "reverse" {
+		if methodName == "reverse_slice" {
 			if haveReverse {
 				// we already have a reverse at the end of the chain, so
 				// delete the one we just added
@@ -333,7 +341,9 @@ func buildPipeline(chain []*ast.CallExpr, exprTypes map[ast.Expr]types.TypeAndVa
 }
 
 var transformations = map[string]transformation{
-	"all": transformation{
+	// Slice methods
+
+	"all_slice": transformation{
 		recv:   `[]#T`,
 		params: []string{`func(#T) bool`},
 		ret:    `bool`,
@@ -355,7 +365,7 @@ var transformations = map[string]transformation{
 		typeFn: justSliceElem,
 	},
 
-	"any": transformation{
+	"any_slice": transformation{
 		recv:   `[]#T`,
 		params: []string{`func(#T) bool`},
 		ret:    `bool`,
@@ -377,7 +387,7 @@ var transformations = map[string]transformation{
 		typeFn: justSliceElem,
 	},
 
-	"contains": transformation{
+	"contains_slice": transformation{
 		recv:   `[]#T`,
 		params: []string{`#T`},
 		ret:    `bool`,
@@ -399,7 +409,7 @@ var transformations = map[string]transformation{
 		typeFn: justSliceElem,
 	},
 
-	"containsNil": transformation{
+	"containsNil_slice": transformation{
 		recv:   `[]#T`,
 		params: []string{`#T`}, // unused
 		ret:    `bool`,
@@ -421,7 +431,7 @@ var transformations = map[string]transformation{
 		typeFn: justSliceElem,
 	},
 
-	"drop": transformation{
+	"drop_slice": transformation{
 		recv:   `[]#T`,
 		params: []string{`int`},
 		ret:    `[]#T`,
@@ -456,7 +466,7 @@ var transformations = map[string]transformation{
 		typeFn: justSliceElem,
 	},
 
-	"dropWhile": transformation{
+	"dropWhile_slice": transformation{
 		recv:   `[]#T`,
 		params: []string{`func(#T) bool`},
 		ret:    `[]#T`,
@@ -488,7 +498,7 @@ var transformations = map[string]transformation{
 		typeFn: justSliceElem,
 	},
 
-	"filter": transformation{
+	"filter_slice": transformation{
 		recv:   `[]#T`,
 		params: []string{`func(#T) bool`},
 		ret:    `[]#T`,
@@ -515,7 +525,7 @@ var transformations = map[string]transformation{
 		typeFn: justSliceElem,
 	},
 
-	"fold": transformation{
+	"fold_slice": transformation{
 		recv:   `[]#T`,
 		params: []string{`func(#U, #T) #U`, `#U`},
 		ret:    `#U`,
@@ -541,7 +551,7 @@ var transformations = map[string]transformation{
 		},
 	},
 
-	"fold1": transformation{
+	"fold1_slice": transformation{
 		recv:   `[]#T`,
 		params: []string{`func(#T, #T) #T`},
 		ret:    `#T`,
@@ -571,7 +581,7 @@ var transformations = map[string]transformation{
 		typeFn: justSliceElem,
 	},
 
-	"foreach": transformation{
+	"foreach_slice": transformation{
 		recv:   `[]#T`,
 		params: []string{`func(#T)`},
 		ret:    ``,
@@ -590,7 +600,7 @@ var transformations = map[string]transformation{
 		typeFn: justSliceElem,
 	},
 
-	"morph": transformation{
+	"morph_slice": transformation{
 		recv:   `[]#T`,
 		params: []string{`func(#T) #U`},
 		ret:    `[]#U`,
@@ -620,7 +630,7 @@ var transformations = map[string]transformation{
 		},
 	},
 
-	"reverse": transformation{
+	"reverse_slice": transformation{
 		recv:   `[]#T`,
 		params: nil,
 		ret:    `[]#T`,
@@ -645,7 +655,7 @@ var transformations = map[string]transformation{
 		typeFn: justSliceElem,
 	},
 
-	"take": transformation{
+	"take_slice": transformation{
 		recv:   `[]#T`,
 		params: []string{`int`},
 		ret:    `[]#T`,
@@ -676,7 +686,7 @@ var transformations = map[string]transformation{
 		typeFn: justSliceElem,
 	},
 
-	"takeWhile": transformation{
+	"takeWhile_slice": transformation{
 		recv:   `[]#T`,
 		params: []string{`func(#T) bool`},
 		ret:    `[]#T`,
@@ -703,7 +713,7 @@ var transformations = map[string]transformation{
 		typeFn: justSliceElem,
 	},
 
-	"tee": transformation{
+	"tee_slice": transformation{
 		recv:   `[]#T`,
 		params: []string{`func(#T)`},
 		ret:    `[]#T`,
@@ -724,7 +734,7 @@ var transformations = map[string]transformation{
 		typeFn: justSliceElem,
 	},
 
-	"toSet": transformation{
+	"toSet_slice": transformation{
 		recv:   `[]#T`,
 		params: nil,
 		ret:    "map[#T]struct{}",
@@ -744,9 +754,59 @@ var transformations = map[string]transformation{
 `,
 		typeFn: justSliceElem,
 	},
+
+	// Map methods
+
+	"elems_map": transformation{
+		recv:   `map[#T]#U`,
+		params: nil,
+		ret:    `[]#U`,
+
+		outline: `
+	var elems []#U
+	#next
+	return elems
+`,
+		loop: `
+	for _, x1 := range xs {
+		#next
+	}
+`,
+		cons: `
+		elems = append(elems, #x)
+`,
+		typeFn: justMapKeyElem,
+	},
+
+	"keys_map": transformation{
+		recv:   `map[#T]#U`,
+		params: nil,
+		ret:    `[]#T`,
+
+		outline: `
+	var keys []#T
+	#next
+	return keys
+`,
+		loop: `
+	for x1 := range xs {
+		#next
+	}
+`,
+		cons: `
+		keys = append(keys, #x)
+`,
+		typeFn: justMapKeyElem,
+	},
 }
 
 func justSliceElem(fn *ast.SelectorExpr, args []ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) []types.Type {
 	T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem()
 	return []types.Type{T}
+}
+
+func justMapKeyElem(fn *ast.SelectorExpr, args []ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) []types.Type {
+	m := exprTypes[fn.X].Type.Underlying().(*types.Map)
+	T, U := m.Key(), m.Elem()
+	return []types.Type{T, U}
 }

@@ -299,6 +299,24 @@ func TestPipeline(t *testing.T) {
 	if !reflect.DeepEqual(is, ints{5, 4}) {
 		t.Error("pipeline failed:", is)
 	}
+
+	// map
+	m := map[int]int{1:1, 2:2}
+	meven := func(k, v int) bool { return k%2 == 0}
+	me := m.filter(meven).filter(meven)
+	if !reflect.DeepEqual(me, map[int]int{2:2}) {
+		t.Error("pipeline failed:", me)
+	}
+
+	evenKeys := m.keys().filter(even)
+	if !reflect.DeepEqual(evenKeys, []int{2}) {
+		t.Error("pipeline failed:", evenKeys)
+	}
+
+	sumElems := m.elems().fold(func(x, y int) int { return x + y })
+	if sumElems != 3 {
+		t.Error("pipeline failed:", sumElems)
+	}
 }
 
 func TestTakeDrop(t *testing.T) {
