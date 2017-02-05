@@ -41,8 +41,8 @@ func TestFilter(t *testing.T) {
 
 	// named type
 	type intmap map[int]int
-	im := intmap{1:1, 2:2}.filter(func(k, v int) bool { return true })
-	if !reflect.DeepEqual(im, intmap{1:1, 2:2}) {
+	im := intmap{1: 1, 2: 2}.filter(func(k, v int) bool { return true })
+	if !reflect.DeepEqual(im, intmap{1: 1, 2: 2}) {
 		t.Error("filter failed:", im)
 	}
 }
@@ -301,16 +301,16 @@ func TestPipeline(t *testing.T) {
 	}
 
 	// map
-	m := map[int]int{1:1, 2:2}
-	meven := func(k, v int) bool { return k%2 == 0}
+	m := map[int]int{1: 1, 2: 2}
+	meven := func(k, v int) bool { return k%2 == 0 }
 	me := m.filter(meven).filter(meven)
-	if !reflect.DeepEqual(me, map[int]int{2:2}) {
+	if !reflect.DeepEqual(me, map[int]int{2: 2}) {
 		t.Error("pipeline failed:", me)
 	}
 
-	mdouble := func(k, v int) (int, int) { return k*2, v*2 }
+	mdouble := func(k, v int) (int, int) { return k * 2, v * 2 }
 	dm := m.morph(mdouble).morph(mdouble)
-	if !reflect.DeepEqual(dm, map[int]int{4:4, 8:8}) {
+	if !reflect.DeepEqual(dm, map[int]int{4: 4, 8: 8}) {
 		t.Error("pipeline failed:", dm)
 	}
 

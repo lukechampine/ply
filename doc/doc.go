@@ -1,5 +1,3 @@
-// +build ignore
-
 // Package ply is a pseudo-package that documents the builtin functions and
 // methods added by the Ply compiler.
 //
