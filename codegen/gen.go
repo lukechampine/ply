@@ -56,6 +56,7 @@ var methodGenerators = map[string]func(*ast.SelectorExpr, []ast.Expr, map[ast.Ex
 	"take":      genSliceMethod(takeTempl, "take_slice"),
 	"takeWhile": genSliceMethod(takeWhileTempl, "takeWhile_slice"),
 	"tee":       genSliceMethod(teeTempl, "tee_slice"),
+	"toMap":     toMapGen,
 	"toSet":     genSliceMethod(toSetTempl, "toSet_slice"),
 	"uniq":      genSliceMethod(uniqTempl, "uniq_slice"),
 }
@@ -570,6 +571,26 @@ func (xs #name) tee(fn func(#T)) []#T {
 	return xs
 }
 `
+
+const toMapTempl = `
+type #name []#T
+
+func (xs #name) toMap(fn func(#T) #U) map[#T]#U {
+	m := make(map[#T]#U)
+	for _, x := range xs {
+		m[x] = fn(x)
+	}
+	return m
+}
+`
+
+func toMapGen(fn *ast.SelectorExpr, args []ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
+	// determine arg type
+	sig := exprTypes[args[0]].Type.(*types.Signature)
+	T := sig.Params().At(0).Type()
+	U := sig.Results().At(0).Type()
+	return genMethod(toMapTempl, "toMap_slice", T, U)
+}
 
 const toSetTempl = `
 type #name []#T

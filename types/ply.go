@@ -27,6 +27,7 @@ const (
 	_Reverse
 	_Sort
 	_TakeWhile
+	_ToMap
 	_ToSet
 )
 
@@ -58,6 +59,7 @@ var predeclaredPlyMethods = [...]struct {
 	_Reverse:   {"reverse", 0, false},
 	_Sort:      {"sort", 0, true}, // 1 optional argument
 	_TakeWhile: {"takeWhile", 1, false},
+	_ToMap:     {"toMap", 1, false},
 	_ToSet:     {"toSet", 0, false},
 }
 
@@ -460,6 +462,21 @@ func (check *Checker) plySpecialMethod(x *operand, call *ast.CallExpr, recv Type
 			// TODO: record here?
 		}
 
+	case _ToMap:
+		// ([]T).toMap(func(T) U) map[T]U
+		T := recv.Underlying().(*Slice).Elem() // enforced by lookupPlyMethod
+		fn, ok := x.typ.Underlying().(*Signature)
+		if !ok || fn.Params().Len() != 1 || fn.Results().Len() != 1 || !Identical(fn.Params().At(0).Type(), T) {
+			check.invalidArg(x.pos(), "cannot use %s as func(%s) T value in argument to toMap", x, T)
+			return
+		}
+
+		x.mode = value
+		x.typ = NewMap(fn.Params().At(0).Type(), fn.Results().At(0).Type())
+		if check.Types != nil {
+			// TODO: record here?
+		}
+
 	default:
 		unreachable()
 	}
@@ -503,6 +520,7 @@ func lookupPlyMethod(T Type, name string) (obj Object, index []int, indirect boo
 			"fold":     {nil, nil, true}, // ([]T).fold(func(U, T) U, U) U
 			"morph":    {nil, nil, true}, // ([]T).morph(func(T) U) []U
 			"sort":     {nil, nil, true}, // ([]T).sort(func(T, T) bool) []T
+			"toMap":    {nil, nil, true}, // ([]T).toMap(func(T) U) map[T]U
 		}
 
 	case *Map:

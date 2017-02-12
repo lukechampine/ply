@@ -83,7 +83,7 @@ Supported Functions and Methods
 
 **Methods:** `all`, `any`, `contains`, `drop`, `dropWhile`, `elems`, `filter`,
 `fold`, `foreach`, `keys`, `morph`, `reverse`, `sort`, `take`, `takeWhile`,
-`tee`, `toSet`, `uniq`
+`tee`, `toMap`, `toSet`, `uniq`
 
 - Planned: `join`, `replace`, `split`
 

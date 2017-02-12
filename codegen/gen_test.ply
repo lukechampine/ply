@@ -418,3 +418,17 @@ func TestUniq(t *testing.T) {
 		t.Error("uniq failed:", sum)
 	}
 }
+
+func TestToMap(t *testing.T) {
+	square := func(x int) int { return x * x }
+	m := []int{1, 2, 3}.toMap(square)
+	if !reflect.DeepEqual(m, map[int]int{1: 1, 2: 4, 3: 9}) {
+		t.Error("toMap failed:", m)
+	}
+
+	even := func(x int) bool { return x%2 == 0 }
+	m2 := []int{1, 2, 3}.morph(square).toMap(even)
+	if !reflect.DeepEqual(m2, map[int]bool{1: false, 4: true, 9: false}) {
+		t.Error("toMap failed:", m2)
+	}
+}

@@ -743,6 +743,32 @@ var transformations = map[string]transformation{
 		typeFn: justSliceElem,
 	},
 
+	"toMap_slice": transformation{
+		recv:   `[]#T`,
+		params: []string{`func(#T) #U`},
+		ret:    "map[#T]#U",
+
+		outline: `
+	set := make(map[#T]#U)
+	#next
+	return set
+`,
+		loop: `
+	for _, #e := range recv {
+		#next
+	}
+`,
+		cons: `
+		set[#e] = #arg1(#e)
+`,
+		typeFn: func(fn *ast.SelectorExpr, args []ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) []types.Type {
+			sig := exprTypes[args[0]].Type.Underlying().(*types.Signature)
+			T := sig.Params().At(0).Type()
+			U := sig.Results().At(0).Type()
+			return []types.Type{T, U}
+		},
+	},
+
 	"toSet_slice": transformation{
 		recv:   `[]#T`,
 		params: nil,

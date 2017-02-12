@@ -139,6 +139,12 @@ func (s SliceT) TakeWhile(pred func(T) bool) SliceT
 // Tee calls fn on each element of s and returns s unmodified.
 func (s SliceT) Tee(fn func(T)) SliceT
 
+// ToMap returns a map in which each element of s is mapped to a corresponding
+// value as computed by fn. Note that if s contains duplicate elements,
+// earlier elements will be overwritten in the map. fn is called on every
+// element, regardless of the number of duplicates.
+func (s SliceT) ToMap(fn func(T) U) map[T]U
+
 // ToSet returns a map containing the elements of s as keys, each mapped to
 // the empty struct.
 func (s SliceT) ToSet() map[T]struct{}
