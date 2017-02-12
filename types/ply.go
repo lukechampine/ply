@@ -11,7 +11,8 @@ type plyId int
 
 const (
 	// funcs
-	_Max plyId = iota
+	_Enum plyId = iota
+	_Max
 	_Merge
 	_Min
 	_Not
@@ -37,8 +38,9 @@ var predeclaredPlyFuncs = [...]struct {
 	variadic bool
 	kind     exprKind
 }{
+	_Enum:  {"enum", 1, true, expression}, // 2 optional arguments
 	_Max:   {"max", 2, false, expression},
-	_Merge: {"merge", 2, true, expression},
+	_Merge: {"merge", 2, true, expression}, // arbitrary arguments
 	_Min:   {"min", 2, false, expression},
 	_Not:   {"not", 1, false, expression},
 	_Zip:   {"zip", 3, false, expression},
@@ -110,6 +112,54 @@ func (check *Checker) ply(x *operand, call *ast.CallExpr, id plyId) (_ bool) {
 	}
 
 	switch id {
+	case _Enum:
+		// enum(x, y, s T) []T
+		// enum(x, y T) []T
+		// enum(x T) []T
+		if nargs > 3 {
+			check.errorf(call.Pos(), "enum expects 1, 2, or 3 arguments; found %d", nargs)
+			return
+		}
+
+		// x must be an integer type
+		if !isInteger(x.typ) {
+			check.errorf(x.pos(), "enum expects integer; found %s", x.typ)
+			return
+		}
+		// convert to default type
+		check.convertUntyped(x, defaultType(x.typ))
+
+		// if y is supplied, it must be assignable to x
+		if nargs > 1 {
+			var y operand
+			arg(&y, 1)
+			if y.mode == invalid {
+				return
+			}
+			if !y.assignableTo(check.conf, x.typ, nil) {
+				check.invalidArg(y.pos(), "%s must be assignable to %s", &y, x.typ)
+				return
+			}
+		}
+		// if s is supplied, it must be assignable to x
+		if nargs > 2 {
+			var s operand
+			arg(&s, 2)
+			if s.mode == invalid {
+				return
+			}
+			if !s.assignableTo(check.conf, x.typ, nil) {
+				check.invalidArg(s.pos(), "%s must be assignable to %s", &s, x.typ)
+				return
+			}
+		}
+
+		x.mode = value
+		x.typ = NewSlice(x.typ)
+		if check.Types != nil {
+			//check.recordPlyType(call.Fun, makeSig(x.typ, x.typ, x.typ))
+		}
+
 	case _Merge:
 		// merge(x map[T]U, y ...map[T]U) map[T]U
 
@@ -170,7 +220,7 @@ func (check *Checker) ply(x *operand, call *ast.CallExpr, id plyId) (_ bool) {
 			check.convertUntyped(&y, x.typ)
 		case xu && yu:
 			// x and y are untyped => check for invalid shift
-			if x.mode != y.mode && (x.mode == constant_ || y.mode == constant_) {
+			if (x.mode == constant_) != (y.mode == constant_) {
 				// if x xor y is not constant (possible because it contains a
 				// shift that is yet untyped), convert both of them to float64
 				// (this will result in an error because shifts of floats are

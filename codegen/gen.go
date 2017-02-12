@@ -32,6 +32,7 @@ func rewriteMethod(name string) rewriter {
 }
 
 var funcGenerators = map[string]func(*ast.Ident, []ast.Expr, map[ast.Expr]types.TypeAndValue) (string, string, rewriter){
+	"enum":  enumGen,
 	"max":   maxGen,
 	"merge": mergeGen,
 	"min":   minGen,
@@ -106,6 +107,58 @@ func genSliceMethod(templ, methodname string) func(fn *ast.SelectorExpr, args []
 		T := exprTypes[fn.X].Type.Underlying().(*types.Slice).Elem()
 		return genMethod(templ, methodname, T)
 	}
+}
+
+const enumTempl = `
+func #name(x, y, s #T) []#T {
+	if s == 0 || (x < y && s < 0) || (x > y && s > 0) {
+		panic("non-terminating enum")
+	}
+	e := make([]#T, 0, 1+(y-x)/s)
+	for i := x; (x < y && i < y) || (x > y && i > y); i += s {
+		e = append(e, i)
+	}
+	return e
+}
+`
+
+const enum2Templ = `
+func #name(x, y #T) []#T {
+	if x > y {
+		panic("non-terminating enum")
+	}
+	e := make([]#T, y-x)
+	for i := range e {
+		e[i] = x+#T(i)
+	}
+	return e
+}
+`
+
+const enum1Templ = `
+func #name(x #T) []#T {
+	if x < 0 {
+		panic("non-terminating enum")
+	}
+	e := make([]#T, x)
+	for i := range e {
+		e[i] = #T(i)
+	}
+	return e
+}
+`
+
+func enumGen(fn *ast.Ident, args []ast.Expr, exprTypes map[ast.Expr]types.TypeAndValue) (name, code string, r rewriter) {
+	T := exprTypes[args[0]].Type
+	switch len(args) {
+	case 3:
+		return genFunc(enumTempl, "enum", T)
+	case 2:
+		return genFunc(enum2Templ, "enum", T)
+	case 1:
+		return genFunc(enum1Templ, "enum", T)
+	}
+	return
 }
 
 const maxTempl = `

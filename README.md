@@ -77,7 +77,7 @@ on `ply-test.go` and `ply-impls.go`.
 Supported Functions and Methods
 -------------------------------
 
-**Builtins:** `max`, `merge`, `min`, `not`, `zip`
+**Builtins:** `enum`, `max`, `merge`, `min`, `not`, `zip`
 
 - Planned: `repeat`, `compose`
 
@@ -178,7 +178,7 @@ Lastly, it's worth pointing out that pipelining cannot eliminate any
 allocations performed inside function arguments. For example, in this chain:
 
 ```go
-xrange := func(n int) []int {
+myEnum := func(n int) []int {
 	r := make([]int, n)
 	for i := range r {
 		r[i] = i
@@ -186,11 +186,11 @@ xrange := func(n int) []int {
 	return r
 }
 sum := func(x, y int) int { return x + y }
-total := xs.morph(xrange).fold(sum)
+total := xs.morph(myEnum).fold(sum)
 ```
 
 A handwritten version of this chain could eliminate the allocations performed
-by `xrange`, but there is no way to do so programmatically.
+by `myEnum`, but there is no way to do so programmatically.
 
 
 **Parallelization (planned):**

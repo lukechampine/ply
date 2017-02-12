@@ -153,6 +153,17 @@ func (s SliceT) ToSet() map[T]struct{}
 // elements is preserved.
 func (s SliceT) Uniq() SliceT
 
+// Enum enumerates the range [x,y) using step s, which may be negative. T must
+// be an integer type, which includes byte and rune. Only one argument is
+// mandatory:
+//
+// - enum(x, y) is equivalent to enum(x, y, 1)
+// - enum(y) is equivalent to enum(0, y, 1)
+//
+// Enum returns an empty slice (not nil) if x == y. Enum panics if y is
+// unreachable, i.e. if s == 0 || (x > y && s > 0) || (x < y && s < 0).
+func Enum(x, y, s T) []T
+
 // Max returns the larger of x or y, as determined by the > operator. T must
 // be an ordered type; see https://golang.org/ref/spec#Comparison_operators
 //
