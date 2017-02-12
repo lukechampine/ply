@@ -2,11 +2,13 @@ package codegen
 
 import (
 	"bytes"
+	"errors"
 	"go/ast"
 	"go/parser"
 	"go/printer"
 	"go/token"
 	"log"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -138,6 +140,16 @@ func Compile(filenames []string) (map[string][]byte, error) {
 	}
 	if len(plyFiles) == 0 {
 		return nil, nil
+	}
+
+	// install each import
+	for _, f := range files {
+		for _, im := range f.Imports {
+			out, err := exec.Command("go", "install", strings.Trim(im.Path.Value, `"`)).CombinedOutput()
+			if err != nil {
+				return nil, errors.New(string(out))
+			}
+		}
 	}
 
 	// type-check the package
