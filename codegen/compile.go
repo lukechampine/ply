@@ -77,7 +77,11 @@ func (s specializer) addDecl(filename, code string) {
 		// like package identifiers, and we append a . to filter out non-
 		// SelectorExprs. Still, this feels unsafe and I'd prefer to move this
 		// replacement to gen.go.
-		code = strings.Replace(code, qual+".", ident+".", -1)
+		if ident == "." {
+			code = strings.Replace(code, qual+".", "", -1)
+		} else {
+			code = strings.Replace(code, qual+".", ident+".", -1)
+		}
 	}
 
 	f, err := parser.ParseFile(s.fset, "", code, 0)
