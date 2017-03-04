@@ -436,27 +436,27 @@ func TestToMap(t *testing.T) {
 
 func TestEnum(t *testing.T) {
 	toThree := enum(3)
-	if !reflect.DeepEqual(toThree, []int{0,1,2}) {
+	if !reflect.DeepEqual(toThree, []int{0, 1, 2}) {
 		t.Error("enum failed:", toThree)
 	}
 
 	toThree = enum(0, 3)
-	if !reflect.DeepEqual(toThree, []int{0,1,2}) {
+	if !reflect.DeepEqual(toThree, []int{0, 1, 2}) {
 		t.Error("enum failed:", toThree)
 	}
 
 	toThree = enum(0, 3, 1)
-	if !reflect.DeepEqual(toThree, []int{0,1,2}) {
+	if !reflect.DeepEqual(toThree, []int{0, 1, 2}) {
 		t.Error("enum failed:", toThree)
 	}
 
 	neg := enum(3, 0, -1)
-	if !reflect.DeepEqual(neg, []int{3,2,1}) {
+	if !reflect.DeepEqual(neg, []int{3, 2, 1}) {
 		t.Error("enum failed:", neg)
 	}
 
-	neg = enum(3).morph(func(x int) int { return 3-x })
-	if !reflect.DeepEqual(neg, []int{3,2,1}) {
+	neg = enum(3).morph(func(x int) int { return 3 - x })
+	if !reflect.DeepEqual(neg, []int{3, 2, 1}) {
 		t.Error("enum failed:", neg)
 	}
 
