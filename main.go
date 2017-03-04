@@ -104,7 +104,8 @@ func main() {
 			log.Fatal(err)
 		}
 		for name, code := range plyFiles {
-			filename := filepath.Join(dir, name)
+			// .go -> .ply
+			filename := filepath.Join(dir, "ply-"+strings.Replace(filepath.Base(name), ".ply", ".go", -1))
 			err = ioutil.WriteFile(filename, code, 0666)
 			if err != nil {
 				log.Fatal(err)
@@ -128,7 +129,8 @@ func main() {
 				log.Fatal(err)
 			}
 			for name, code := range plyFiles {
-				filename := filepath.Join(dir, name)
+				// .go -> .ply
+				filename := filepath.Join(dir, "ply-"+strings.Replace(filepath.Base(name), ".ply", ".go", -1))
 				err = ioutil.WriteFile(filename, code, 0666)
 				if err != nil {
 					log.Fatal(err)

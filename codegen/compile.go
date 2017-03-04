@@ -113,6 +113,13 @@ func (s specializer) Rewrite(node ast.Node) (ast.Node, gorewrite.Rewriter) {
 	return node, s
 }
 
+func (s specializer) implBytes() []byte {
+	var buf bytes.Buffer
+	pcfg := &printer.Config{Tabwidth: 8, Mode: printer.RawFormat}
+	pcfg.Fprint(&buf, s.fset, ast.MergePackageFiles(s.pkg, ast.FilterFuncDuplicates|ast.FilterImportDuplicates))
+	return buf.Bytes()
+}
+
 func astToBytes(fset *token.FileSet, node interface{}) []byte {
 	var buf bytes.Buffer
 	pcfg := &printer.Config{Tabwidth: 8, Mode: printer.RawFormat | printer.SourcePos}
@@ -121,8 +128,7 @@ func astToBytes(fset *token.FileSet, node interface{}) []byte {
 }
 
 // Compile compiles the provided files as a single package. For each supplied
-// .ply file, the compiled Go code is returned, keyed by a suggested filename
-// (not a full filepath).
+// .ply file, the compiled Go code is returned, keyed by the original filename.
 func Compile(filenames []string) (map[string][]byte, error) {
 	// parse each supplied file
 	fset := token.NewFileSet()
@@ -165,35 +171,32 @@ func Compile(filenames []string) (map[string][]byte, error) {
 
 	// walk the AST of each .ply file in the package, generating ply functions
 	// and rewriting their callsites
-	spec := specializer{
-		types: info.Types,
-		fset:  fset,
-		pkg: &ast.Package{
-			Name:  pkg.Name(),
-			Files: make(map[string]*ast.File),
-		},
-		imports: make(map[string]struct{}),
-	}
-	for _, f := range plyFiles {
-		gorewrite.Rewrite(spec, f)
-	}
-
-	// write compiled files to set
 	set := make(map[string][]byte)
 	for name, f := range plyFiles {
-		name = "ply-" + strings.Replace(filepath.Base(name), ".ply", ".go", -1)
-		set[name] = astToBytes(fset, f)
-	}
+		// create a specializer
+		spec := specializer{
+			types: info.Types,
+			fset:  fset,
+			pkg: &ast.Package{
+				Name:  pkg.Name(),
+				Files: make(map[string]*ast.File),
+			},
+			imports: make(map[string]struct{}),
+		}
 
-	// combine generated ply functions into a single file
-	merged := ast.MergePackageFiles(spec.pkg, ast.FilterFuncDuplicates|ast.FilterImportDuplicates)
-	// add imports
-	for importPath := range spec.imports {
-		astutil.AddImport(fset, merged, importPath)
-	}
+		// rewrite callsites while generating impls
+		gorewrite.Rewrite(spec, f)
 
-	// add ply-impls to set
-	set["ply-impls.go"] = astToBytes(fset, merged)
+		// add impl imports
+		for importPath := range spec.imports {
+			astutil.AddImport(fset, f, importPath)
+		}
+		// manually merge f with impls
+		code := astToBytes(fset, f)
+		impls := spec.implBytes()
+		impls = impls[bytes.IndexByte(impls, '\n'):] // remove package decl
+		set[name] = append(code, impls...)
+	}
 
 	return set, nil
 }
