@@ -23,10 +23,11 @@ import (
 // generic ply function and rewrites the callsites to use their corresponding
 // specialized function.
 type specializer struct {
-	types   map[ast.Expr]types.TypeAndValue
-	fset    *token.FileSet
-	pkg     *ast.Package
-	imports map[string]struct{}
+	types       map[ast.Expr]types.TypeAndValue
+	fset        *token.FileSet
+	pkg         *ast.Package
+	fileImports map[string]string   // e.g. "math/big" -> "big"
+	implImports map[string]struct{} // new imports required by impls
 }
 
 func hasMethod(recv ast.Expr, method string, exprTypes map[ast.Expr]types.TypeAndValue) bool {
@@ -40,13 +41,45 @@ func hasMethod(recv ast.Expr, method string, exprTypes map[ast.Expr]types.TypeAn
 	return false
 }
 
+func findImports(fileImports []*ast.ImportSpec, pkgImports map[string]string) map[string]string {
+	imports := make(map[string]string)
+	for _, i := range fileImports {
+		path := i.Path.Value[1 : len(i.Path.Value)-1]
+		var name string
+		if i.Name != nil {
+			name = i.Name.String()
+		} else {
+			name = pkgImports[path]
+		}
+		imports[path] = name
+	}
+	return imports
+}
+
 func (s specializer) addDecl(filename, code string) {
 	if _, ok := s.pkg.Files[filename]; ok {
 		// check for existence first, because parsing is expensive
 		return
 	}
+
 	// add package header to code
 	code = "package " + s.pkg.Name + code
+
+	// search for import qualifiers and replace them with the proper
+	// identifier
+	// TODO: not good enough. Needs to be done at AST-level
+	for qual, ident := range s.fileImports {
+		// HACK: we haven't parsed the code, so we resort to naive string
+		// replacement. Thus we must minimize the risk that we accidentally
+		// replace something that isn't a package identifier, including
+		// strings and ast.SelectorExprs (i.e. struct accessors or method
+		// calls). Generated code should never include weird strings that look
+		// like package identifiers, and we append a . to filter out non-
+		// SelectorExprs. Still, this feels unsafe and I'd prefer to move this
+		// replacement to gen.go.
+		code = strings.Replace(code, qual+".", ident+".", -1)
+	}
+
 	f, err := parser.ParseFile(s.fset, "", code, 0)
 	if err != nil {
 		log.Fatal(err)
@@ -95,7 +128,7 @@ func (s specializer) Rewrite(node ast.Node) (ast.Node, gorewrite.Rewriter) {
 				s.addDecl(name, code)
 				node = rewrite(n)
 				if fn.Sel.Name == "sort" {
-					s.imports["sort"] = struct{}{}
+					s.implImports["sort"] = struct{}{}
 				}
 				rewrote = true
 			}
@@ -168,6 +201,11 @@ func Compile(filenames []string) (map[string][]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	// create import map
+	pkgImports := make(map[string]string)
+	for _, i := range pkg.Imports() {
+		pkgImports[i.Path()] = i.Name()
+	}
 
 	// walk the AST of each .ply file in the package, generating ply functions
 	// and rewriting their callsites
@@ -181,14 +219,15 @@ func Compile(filenames []string) (map[string][]byte, error) {
 				Name:  pkg.Name(),
 				Files: make(map[string]*ast.File),
 			},
-			imports: make(map[string]struct{}),
+			fileImports: findImports(f.Imports, pkgImports),
+			implImports: make(map[string]struct{}),
 		}
 
 		// rewrite callsites while generating impls
 		gorewrite.Rewrite(spec, f)
 
 		// add impl imports
-		for importPath := range spec.imports {
+		for importPath := range spec.implImports {
 			astutil.AddImport(fset, f, importPath)
 		}
 		// manually merge f with impls
