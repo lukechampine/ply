@@ -5,6 +5,7 @@
 package gcimporter
 
 import (
+	"bytes"
 	"fmt"
 	"internal/testenv"
 	"io/ioutil"
@@ -16,7 +17,7 @@ import (
 	"testing"
 	"time"
 
-	"go/types"
+	"github.com/lukechampine/ply/types"
 )
 
 // skipSpecialPlatforms causes the test to be skipped for platforms where
@@ -34,22 +35,7 @@ func skipSpecialPlatforms(t *testing.T) {
 }
 
 func compile(t *testing.T, dirname, filename string) string {
-	testenv.MustHaveGoBuild(t)
-	cmd := exec.Command("go", "tool", "compile", filename)
-	cmd.Dir = dirname
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Logf("%s", out)
-		t.Fatalf("go tool compile %s failed: %s", filename, err)
-	}
-	// filename should end with ".go"
-	return filepath.Join(dirname, filename[:len(filename)-2]+"o")
-}
-
-// TODO(gri) Remove this function once we switched to new export format by default.
-func compileNewExport(t *testing.T, dirname, filename string) string {
-	testenv.MustHaveGoBuild(t)
-	cmd := exec.Command("go", "tool", "compile", "-newexport", filename)
+	cmd := exec.Command(testenv.GoToolPath(t), "tool", "compile", filename)
 	cmd.Dir = dirname
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -121,6 +107,8 @@ func TestImportTestdata(t *testing.T) {
 		// additional packages that are not strictly required for
 		// import processing alone (they are exported to err "on
 		// the safe side").
+		// TODO(gri) update the want list to be precise, now that
+		// the textual export data is gone.
 		got := fmt.Sprint(pkg.Imports())
 		for _, want := range []string{"go/ast", "go/token"} {
 			if !strings.Contains(got, want) {
@@ -130,27 +118,66 @@ func TestImportTestdata(t *testing.T) {
 	}
 }
 
-// TODO(gri) Remove this function once we switched to new export format by default
-//           (and update the comment and want list in TestImportTestdata).
-func TestImportTestdataNewExport(t *testing.T) {
+func TestVersionHandling(t *testing.T) {
+	skipSpecialPlatforms(t) // we really only need to exclude nacl platforms, but this is fine
+
 	// This package only handles gc export data.
 	if runtime.Compiler != "gc" {
 		t.Skipf("gc-built packages not available (compiler = %s)", runtime.Compiler)
 		return
 	}
 
-	if outFn := compileNewExport(t, "testdata", "exports.go"); outFn != "" {
-		defer os.Remove(outFn)
+	const dir = "./testdata/versions"
+	list, err := ioutil.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
 	}
 
-	if pkg := testPath(t, "./testdata/exports", "."); pkg != nil {
-		// The package's Imports list must include all packages
-		// explicitly imported by exports.go, plus all packages
-		// referenced indirectly via exported objects in exports.go.
-		want := `[package ast ("go/ast") package token ("go/token")]`
-		got := fmt.Sprint(pkg.Imports())
-		if got != want {
-			t.Errorf(`Package("exports").Imports() = %s, want %s`, got, want)
+	for _, f := range list {
+		name := f.Name()
+		if !strings.HasSuffix(name, ".a") {
+			continue // not a package file
+		}
+		if strings.Contains(name, "corrupted") {
+			continue // don't process a leftover corrupted file
+		}
+		pkgpath := "./" + name[:len(name)-2]
+
+		// test that export data can be imported
+		_, err := Import(make(map[string]*types.Package), pkgpath, dir)
+		if err != nil {
+			t.Errorf("import %q failed: %v", pkgpath, err)
+			continue
+		}
+
+		// create file with corrupted export data
+		// 1) read file
+		data, err := ioutil.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		// 2) find export data
+		i := bytes.Index(data, []byte("\n$$B\n")) + 5
+		j := bytes.Index(data[i:], []byte("\n$$\n")) + i
+		if i < 0 || j < 0 || i > j {
+			t.Fatalf("export data section not found (i = %d, j = %d)", i, j)
+		}
+		// 3) corrupt the data (increment every 7th byte)
+		for k := j - 13; k >= i; k -= 7 {
+			data[k]++
+		}
+		// 4) write the file
+		pkgpath += "_corrupted"
+		filename := filepath.Join(dir, pkgpath) + ".a"
+		ioutil.WriteFile(filename, data, 0666)
+		defer os.Remove(filename)
+
+		// test that importing the corrupted file results in an error
+		_, err = Import(make(map[string]*types.Package), pkgpath, dir)
+		if err == nil {
+			t.Errorf("import corrupted %q succeeded", pkgpath)
+		} else if msg := err.Error(); !strings.Contains(msg, "version skew") {
+			t.Errorf("import %q error incorrect (%s)", pkgpath, msg)
 		}
 	}
 }
@@ -321,44 +348,44 @@ func TestIssue13898(t *testing.T) {
 		return
 	}
 
-	// import go/internal/gcimporter which imports go/types partially
+	// import go/internal/gcimporter which imports github.com/lukechampine/ply/types partially
 	imports := make(map[string]*types.Package)
 	_, err := Import(imports, "go/internal/gcimporter", ".")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// look for go/types package
+	// look for github.com/lukechampine/ply/types package
 	var goTypesPkg *types.Package
 	for path, pkg := range imports {
-		if path == "go/types" {
+		if path == "github.com/lukechampine/ply/types" {
 			goTypesPkg = pkg
 			break
 		}
 	}
 	if goTypesPkg == nil {
-		t.Fatal("go/types not found")
+		t.Fatal("github.com/lukechampine/ply/types not found")
 	}
 
-	// look for go/types.Object type
+	// look for github.com/lukechampine/ply/types.Object type
 	obj := goTypesPkg.Scope().Lookup("Object")
 	if obj == nil {
-		t.Fatal("go/types.Object not found")
+		t.Fatal("github.com/lukechampine/ply/types.Object not found")
 	}
 	typ, ok := obj.Type().(*types.Named)
 	if !ok {
-		t.Fatalf("go/types.Object type is %v; wanted named type", typ)
+		t.Fatalf("github.com/lukechampine/ply/types.Object type is %v; wanted named type", typ)
 	}
 
-	// lookup go/types.Object.Pkg method
+	// lookup github.com/lukechampine/ply/types.Object.Pkg method
 	m, index, indirect := types.LookupFieldOrMethod(typ, false, nil, "Pkg")
 	if m == nil {
-		t.Fatalf("go/types.Object.Pkg not found (index = %v, indirect = %v)", index, indirect)
+		t.Fatalf("github.com/lukechampine/ply/types.Object.Pkg not found (index = %v, indirect = %v)", index, indirect)
 	}
 
-	// the method must belong to go/types
-	if m.Pkg().Path() != "go/types" {
-		t.Fatalf("found %v; want go/types", m.Pkg())
+	// the method must belong to github.com/lukechampine/ply/types
+	if m.Pkg().Path() != "github.com/lukechampine/ply/types" {
+		t.Fatalf("found %v; want github.com/lukechampine/ply/types", m.Pkg())
 	}
 }
 

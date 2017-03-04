@@ -6,12 +6,11 @@ package gccgoimporter
 
 import (
 	"bufio"
+	"github.com/lukechampine/ply/types"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
-
-	"github.com/lukechampine/ply/types"
 )
 
 // Information about a specific installation of gccgo.

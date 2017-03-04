@@ -5,7 +5,7 @@
 package gccgoimporter
 
 import (
-	"go/types"
+	"github.com/lukechampine/ply/types"
 	"runtime"
 	"testing"
 )

@@ -6,7 +6,7 @@ package gccgoimporter
 
 import (
 	"bytes"
-	"go/types"
+	"github.com/lukechampine/ply/types"
 	"strings"
 	"testing"
 	"text/scanner"
