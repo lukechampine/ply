@@ -41,7 +41,8 @@ func adhoc(args []string) (dir string, files []string, _ error) {
 }
 
 // packages parses args as a set of package files, keyed by their directory.
-func packages(args []string) (map[string][]string, error) {
+// If xtest is true, files ending in _test are excluded.
+func packages(args []string, xtest bool) (map[string][]string, error) {
 	pkgs := make(map[string][]string)
 	if len(args) == 0 {
 		args = []string{"."} // current directory
@@ -64,6 +65,10 @@ func packages(args []string) (map[string][]string, error) {
 			if strings.HasPrefix(file, "ply-") {
 				// don't include previous codegen; it will cause redefinition
 				// errors
+				continue
+			}
+			if xtest && (strings.HasSuffix(file, "_test.go") || strings.HasSuffix(file, "_test.ply")) {
+				// exclude test files if xtest is set
 				continue
 			}
 			if strings.HasSuffix(file, ".go") || strings.HasSuffix(file, ".ply") {
@@ -116,7 +121,8 @@ func main() {
 	} else if args[0] == "run" {
 		log.Fatal("ply run: no .ply or .go files listed")
 	} else {
-		pkgs, err := packages(args[1:])
+		xtest := args[0] != "test"
+		pkgs, err := packages(args[1:], xtest)
 		if err != nil {
 			log.Fatal(err)
 		}

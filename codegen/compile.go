@@ -44,7 +44,7 @@ func hasMethod(recv ast.Expr, method string, exprTypes map[ast.Expr]types.TypeAn
 func findImports(fileImports []*ast.ImportSpec, pkgImports map[string]string) map[string]string {
 	imports := make(map[string]string)
 	for _, i := range fileImports {
-		path := i.Path.Value[1 : len(i.Path.Value)-1]
+		path := i.Path.Value[1 : len(i.Path.Value)-1] // strip surrounding quotes
 		var name string
 		if i.Name != nil {
 			name = i.Name.String()
